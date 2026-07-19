@@ -66,6 +66,12 @@ export class WorldScene extends Phaser.Scene {
     this.setupInput();
     this.setupHud(region);
 
+    // Debug hooks for automated smoke testing.
+    (window as unknown as { __ccDebug?: unknown }).__ccDebug = {
+      battle: (id: string, lvl: number) => this.startWildBattle(id, lvl),
+      trainer: () => this.startTrainerBattle(),
+    };
+
     this.events.on(Phaser.Scenes.Events.RESUME, this.onResume, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.events.off(Phaser.Scenes.Events.RESUME, this.onResume, this);

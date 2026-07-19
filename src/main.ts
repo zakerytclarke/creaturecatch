@@ -25,5 +25,6 @@ const config: Phaser.Types.Core.GameConfig = {
   scene: [BootScene, PreloadScene, TitleScene, WorldScene, BattleScene, MenuScene],
 };
 
-// eslint-disable-next-line no-new
-new Phaser.Game(config);
+const game = new Phaser.Game(config);
+// Expose for automated smoke tests / debugging.
+(window as unknown as { __cc_game: Phaser.Game }).__cc_game = game;
