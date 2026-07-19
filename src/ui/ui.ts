@@ -62,10 +62,6 @@ export class Button extends Phaser.GameObjects.Container {
 
   constructor(scene: Phaser.Scene, x: number, y: number, text: string, opts: ButtonOpts) {
     super(scene, x, y);
-    // Containers default to origin 0.5 which desyncs hitboxes from drawn UI.
-    // Phaser typings omit setOrigin on Container in this version; runtime has it.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (this as any).setOrigin(0, 0);
     this.opts = opts;
     this.enabled = opts.enabled ?? true;
     this.bg = scene.add.graphics();
