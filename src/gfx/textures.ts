@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { SPECIES_LIST, Species } from '../data/creatures';
 import { ElementType } from '../data/types';
 import { Biome } from '../data/regions';
-import { hashString } from '../systems/rng';
+import { drawCreatureModular } from './creatureParts';
 
 export const TILE = 32;
 export const CREATURE_SIZE = 96;
@@ -362,151 +362,9 @@ function drawPlayer(g: Phaser.GameObjects.Graphics, dir: 'down' | 'up' | 'left' 
   }
 }
 
-type BodyForm = 'blob' | 'quad' | 'bird' | 'bug' | 'serpent' | 'drake';
-
-function pickForm(species: Species, seed: number): BodyForm {
-  const n = species.name.toLowerCase();
-  if (/moth|beetle|spider|dragonfly|fly|bug/.test(n)) return 'bug';
-  if (/owl|sparrow|hawk|falcon|ray|bat|wing|kite|puff|avian|lune/.test(n)) return 'bird';
-  if (/serpent|worm|eel|kelp/.test(n)) return 'serpent';
-  if (/drake|wyrm|dragon|newt|salam|infer/.test(n)) return 'drake';
-  if (/pup|hound|fox|cat|kit|fawn|boar|ram|colt|cub|otter|seal|frog|crab|penguin|mole|turtle|wolf/.test(n))
-    return 'quad';
-  const forms: BodyForm[] = ['blob', 'quad', 'bird', 'bug', 'serpent', 'drake'];
-  return forms[seed % forms.length];
-}
-
-function drawCuteEyes(
-  g: Phaser.GameObjects.Graphics,
-  lx: number,
-  ly: number,
-  rx: number,
-  ry: number,
-  eyeR: number,
-) {
-  g.fillStyle(0xffffff, 1);
-  g.fillCircle(lx, ly, eyeR);
-  g.fillCircle(rx, ry, eyeR);
-  g.fillStyle(0x263238, 1);
-  g.fillCircle(lx, ly + eyeR * 0.08, eyeR * 0.58);
-  g.fillCircle(rx, ry + eyeR * 0.08, eyeR * 0.58);
-  g.fillStyle(0xffffff, 1);
-  g.fillCircle(lx - eyeR * 0.28, ly - eyeR * 0.28, eyeR * 0.3);
-  g.fillCircle(rx - eyeR * 0.28, ry - eyeR * 0.28, eyeR * 0.3);
-}
-
-/**
- * BDSP chibi creature: oversized head, stubby body, vinyl-toy shading, oval shadow.
- */
+/** Creature sprites — modular archetypes + body parts (see creatureParts.ts). */
 export function drawCreature(g: Phaser.GameObjects.Graphics, species: Species, size: number) {
-  const type = species.types[0];
-  const paint = TYPE_PAINT[type];
-  const seed = hashString(species.id);
-  const hueJitter = (((seed >> 5) & 0xff) / 255 - 0.5) * 0.1;
-  const body = shade(paint.body, hueJitter);
-  const accent = paint.accent;
-  const belly = paint.belly;
-  const dark = shade(body, -0.25);
-  const form = pickForm(species, seed);
-  const stageScale = 1 + species.stage * 0.1;
-
-  const cx = size / 2;
-  const cy = size / 2 + size * 0.06;
-  const R = size * 0.2 * stageScale;
-
-  ovalShadow(g, cx, size * 0.9, R * 2.4, R * 0.55, 0.3);
-
-  // Type back props
-  if (type === 'fire') {
-    g.fillStyle(accent, 1);
-    g.fillTriangle(cx, cy - R * 1.7, cx - R * 0.4, cy - R * 0.85, cx + R * 0.4, cy - R * 0.85);
-    g.fillStyle(0xfff59d, 1);
-    g.fillTriangle(cx, cy - R * 1.35, cx - R * 0.2, cy - R * 0.85, cx + R * 0.2, cy - R * 0.85);
-  }
-  if (type === 'air' || form === 'bird') {
-    g.fillStyle(accent, 0.95);
-    g.fillEllipse(cx - R * 1.2, cy + R * 0.1, R * 0.95, R * 0.4);
-    g.fillEllipse(cx + R * 1.2, cy + R * 0.1, R * 0.95, R * 0.4);
-  }
-  if (type === 'darkness') {
-    g.fillStyle(dark, 1);
-    g.fillTriangle(cx - R * 0.5, cy - R * 0.95, cx - R * 0.25, cy - R * 1.5, cx - R * 0.05, cy - R * 0.95);
-    g.fillTriangle(cx + R * 0.5, cy - R * 0.95, cx + R * 0.25, cy - R * 1.5, cx + R * 0.05, cy - R * 0.95);
-  }
-
-  // Stubby body (small relative to head — chibi)
-  const bodyY = cy + R * 0.45;
-  if (form === 'serpent') {
-    g.fillStyle(body, 1);
-    g.fillEllipse(cx + R * 0.5, bodyY + R * 0.2, R * 1.4, R * 0.5);
-    sphere(g, cx - R * 0.1, bodyY - R * 0.1, R * 0.55, body);
-  } else {
-    sphere(g, cx, bodyY, R * 0.7, body);
-    g.fillStyle(belly, 1).fillEllipse(cx, bodyY + R * 0.15, R * 0.85, R * 0.55);
-  }
-
-  // Tiny feet
-  if (form !== 'serpent' && form !== 'bird') {
-    g.fillStyle(dark, 1);
-    g.fillEllipse(cx - R * 0.4, bodyY + R * 0.65, R * 0.32, R * 0.18);
-    g.fillEllipse(cx + R * 0.4, bodyY + R * 0.65, R * 0.32, R * 0.18);
-  }
-  if (form === 'bird') {
-    g.fillStyle(accent, 1);
-    g.fillRoundedRect(cx - R * 0.35, bodyY + R * 0.55, R * 0.18, R * 0.28, 2);
-    g.fillRoundedRect(cx + R * 0.18, bodyY + R * 0.55, R * 0.18, R * 0.28, 2);
-  }
-
-  // OVERSIZED head (BDSP chibi)
-  const headR = R * 0.95;
-  const headY = cy - R * 0.35;
-  sphere(g, cx, headY, headR, body);
-
-  // Ears / features by form
-  if (form === 'quad' || form === 'blob') {
-    if (seed % 2 === 0) {
-      // Pointy ears
-      g.fillStyle(body, 1);
-      g.fillTriangle(cx - headR * 0.7, headY - headR * 0.3, cx - headR * 0.45, headY - headR * 1.15, cx - headR * 0.15, headY - headR * 0.45);
-      g.fillTriangle(cx + headR * 0.7, headY - headR * 0.3, cx + headR * 0.45, headY - headR * 1.15, cx + headR * 0.15, headY - headR * 0.45);
-      g.fillStyle(accent, 0.9);
-      g.fillTriangle(cx - headR * 0.55, headY - headR * 0.45, cx - headR * 0.45, headY - headR * 0.95, cx - headR * 0.3, headY - headR * 0.5);
-      g.fillTriangle(cx + headR * 0.55, headY - headR * 0.45, cx + headR * 0.45, headY - headR * 0.95, cx + headR * 0.3, headY - headR * 0.5);
-    } else {
-      sphere(g, cx - headR * 0.7, headY - headR * 0.55, headR * 0.28, body);
-      sphere(g, cx + headR * 0.7, headY - headR * 0.55, headR * 0.28, body);
-    }
-  }
-  if (form === 'drake') {
-    g.fillStyle(accent, 1);
-    g.fillTriangle(cx - headR * 0.35, headY - headR * 0.6, cx - headR * 0.5, headY - headR * 1.25, cx - headR * 0.05, headY - headR * 0.7);
-    g.fillTriangle(cx + headR * 0.35, headY - headR * 0.6, cx + headR * 0.5, headY - headR * 1.25, cx + headR * 0.05, headY - headR * 0.7);
-  }
-  if (form === 'bug') {
-    g.lineStyle(2, dark, 1);
-    g.lineBetween(cx - headR * 0.25, headY - headR * 0.7, cx - headR * 0.6, headY - headR * 1.2);
-    g.lineBetween(cx + headR * 0.25, headY - headR * 0.7, cx + headR * 0.6, headY - headR * 1.2);
-    sphere(g, cx - headR * 0.6, headY - headR * 1.2, headR * 0.12, accent);
-    sphere(g, cx + headR * 0.6, headY - headR * 1.2, headR * 0.12, accent);
-  }
-  if (form === 'bird') {
-    g.fillStyle(accent, 1);
-    g.fillTriangle(cx, headY + headR * 0.15, cx + headR * 0.55, headY, cx, headY - headR * 0.1);
-    g.fillTriangle(cx, headY - headR * 1.15, cx - headR * 0.22, headY - headR * 0.7, cx + headR * 0.22, headY - headR * 0.7);
-  }
-
-  // Face
-  const eyeR = headR * 0.22;
-  drawCuteEyes(g, cx - headR * 0.35, headY - headR * 0.05, cx + headR * 0.35, headY - headR * 0.05, eyeR);
-  g.fillStyle(0xff8a80, 0.45);
-  g.fillCircle(cx - headR * 0.65, headY + headR * 0.25, headR * 0.16);
-  g.fillCircle(cx + headR * 0.65, headY + headR * 0.25, headR * 0.16);
-
-  // Tiny smile
-  g.lineStyle(Math.max(1.5, headR * 0.08), dark, 0.65);
-  g.beginPath();
-  g.arc(cx, headY + headR * 0.3, headR * 0.22, 0.15 * Math.PI, 0.85 * Math.PI, false);
-  g.strokePath();
+  drawCreatureModular(g, species, size);
 }
 
 export function generateAllTextures(scene: Phaser.Scene) {
