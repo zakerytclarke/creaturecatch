@@ -6,14 +6,16 @@ import { hashString } from '../systems/rng';
 
 export const TILE = 32;
 export const CREATURE_SIZE = 96;
+export const PLAYER_W = 36;
+export const PLAYER_H = 40;
 
-/** Soft Animal-Crossing × Pokémon-Go type paints. */
+/** Saturated BDSP-like type paints (clean, toy-like). */
 export const TYPE_PAINT: Record<ElementType, { body: number; accent: number; belly: number }> = {
-  fire: { body: 0xff8a65, accent: 0xffd54f, belly: 0xffe0b2 },
-  earth: { body: 0xa1887f, accent: 0x81c784, belly: 0xd7ccc8 },
-  air: { body: 0x90caf9, accent: 0xe1f5fe, belly: 0xf5fbff },
-  water: { body: 0x4fc3f7, accent: 0xb2ebf2, belly: 0xe0f7fa },
-  darkness: { body: 0x9575cd, accent: 0xce93d8, belly: 0xe1bee7 },
+  fire: { body: 0xff7043, accent: 0xffca28, belly: 0xffe0b2 },
+  earth: { body: 0xbcaaa4, accent: 0x66bb6a, belly: 0xefebe9 },
+  air: { body: 0x64b5f6, accent: 0xe3f2fd, belly: 0xffffff },
+  water: { body: 0x29b6f6, accent: 0x81d4fa, belly: 0xe1f5fe },
+  darkness: { body: 0x7e57c2, accent: 0xce93d8, belly: 0xede7f6 },
 };
 
 export function shade(color: number, amt: number): number {
@@ -27,76 +29,195 @@ export function shade(color: number, amt: number): number {
 
 interface BiomePalette {
   ground: number;
-  groundAlt: number;
+  groundDark: number;
+  groundLight: number;
   tall: number;
-  tallTip: number;
-  block: number;
+  tallLight: number;
+  leaf: number;
+  trunk: number;
+  rock: number;
 }
 
+/** High-saturation BDSP diorama palettes. */
 const BIOME_PALETTE: Record<Biome, BiomePalette> = {
-  town: { ground: 0x8fd67a, groundAlt: 0x7fc86c, tall: 0x5cb85a, tallTip: 0x9ae07a, block: 0x6bb86a },
-  forest: { ground: 0x6fbf6a, groundAlt: 0x5eae5c, tall: 0x3f9a4a, tallTip: 0x7ed47a, block: 0x4a8f4a },
-  beach: { ground: 0xf3e2b0, groundAlt: 0xe8d39a, tall: 0xc9b06a, tallTip: 0xe8d48a, block: 0xd4b87a },
-  desert: { ground: 0xedc98a, groundAlt: 0xe0b872, tall: 0xc9a04e, tallTip: 0xe8c878, block: 0xc49a5a },
-  highlands: { ground: 0x8dca88, groundAlt: 0x7aba76, tall: 0x5aa86a, tallTip: 0x9ae09a, block: 0x9aa0b0 },
-  cave: { ground: 0x5a5568, groundAlt: 0x4a4558, tall: 0x6a7d5a, tallTip: 0x8aaa70, block: 0x3e384c },
+  town: {
+    ground: 0x5ec85a,
+    groundDark: 0x48b048,
+    groundLight: 0x7ae06e,
+    tall: 0x3ea83e,
+    tallLight: 0x6ed85a,
+    leaf: 0x4caf50,
+    trunk: 0x8d6e45,
+    rock: 0xa1887f,
+  },
+  forest: {
+    ground: 0x4caf50,
+    groundDark: 0x388e3c,
+    groundLight: 0x66bb6a,
+    tall: 0x2e7d32,
+    tallLight: 0x66bb6a,
+    leaf: 0x43a047,
+    trunk: 0x6d4c41,
+    rock: 0x8d6e63,
+  },
+  beach: {
+    ground: 0xf0d9a0,
+    groundDark: 0xe0c484,
+    groundLight: 0xffe8b8,
+    tall: 0xc9a84e,
+    tallLight: 0xe8d070,
+    leaf: 0x66bb6a,
+    trunk: 0xa1887f,
+    rock: 0xd7ccc8,
+  },
+  desert: {
+    ground: 0xecc078,
+    groundDark: 0xd4a85c,
+    groundLight: 0xf5d698,
+    tall: 0xc9a04e,
+    tallLight: 0xe8c878,
+    leaf: 0xa5d6a7,
+    trunk: 0xa1887f,
+    rock: 0xc4a574,
+  },
+  highlands: {
+    ground: 0x66bb6a,
+    groundDark: 0x4caf50,
+    groundLight: 0x81c784,
+    tall: 0x43a047,
+    tallLight: 0x81c784,
+    leaf: 0x66bb6a,
+    trunk: 0x795548,
+    rock: 0x90a4ae,
+  },
+  cave: {
+    ground: 0x5c5668,
+    groundDark: 0x453f52,
+    groundLight: 0x6d667a,
+    tall: 0x689f38,
+    tallLight: 0x8bc34a,
+    leaf: 0x7cb342,
+    trunk: 0x5d4037,
+    rock: 0x455a64,
+  },
 };
 
-function softShadow(g: Phaser.GameObjects.Graphics, x: number, y: number, w: number, h: number) {
-  g.fillStyle(0x2a3a2a, 0.18);
+function ovalShadow(g: Phaser.GameObjects.Graphics, x: number, y: number, w: number, h: number, a = 0.28) {
+  g.fillStyle(0x1a1a1a, a);
   g.fillEllipse(x, y, w, h);
+}
+
+function sphere(
+  g: Phaser.GameObjects.Graphics,
+  x: number,
+  y: number,
+  r: number,
+  color: number,
+) {
+  // BDSP toy-sphere: base + top-left highlight + bottom-right shade
+  g.fillStyle(color, 1).fillCircle(x, y, r);
+  g.fillStyle(shade(color, -0.22), 0.35).fillCircle(x + r * 0.22, y + r * 0.28, r * 0.7);
+  g.fillStyle(shade(color, 0.45), 0.55).fillCircle(x - r * 0.32, y - r * 0.35, r * 0.38);
+  g.fillStyle(0xffffff, 0.35).fillCircle(x - r * 0.38, y - r * 0.42, r * 0.16);
 }
 
 function drawGround(g: Phaser.GameObjects.Graphics, biome: Biome) {
   const pal = BIOME_PALETTE[biome];
   g.fillStyle(pal.ground, 1).fillRect(0, 0, TILE, TILE);
-  g.fillStyle(pal.groundAlt, 0.55);
-  g.fillCircle(8, 8, 3);
-  g.fillCircle(22, 20, 2.5);
-  g.fillCircle(14, 26, 2);
-  g.fillStyle(shade(pal.ground, 0.12), 0.35);
-  g.fillCircle(26, 6, 2);
-  g.fillCircle(6, 22, 1.8);
+
+  if (biome === 'beach' || biome === 'desert') {
+    // Wavy sand ridges (BDSP shore)
+    g.lineStyle(1.5, pal.groundDark, 0.35);
+    for (let i = 0; i < 4; i++) {
+      const y = 6 + i * 7;
+      g.beginPath();
+      g.moveTo(0, y);
+      g.lineTo(8, y + 1.5);
+      g.lineTo(16, y - 1);
+      g.lineTo(24, y + 1.5);
+      g.lineTo(32, y);
+      g.strokePath();
+    }
+    g.fillStyle(pal.groundLight, 0.35);
+    g.fillCircle(10, 8, 2);
+    g.fillCircle(22, 18, 1.5);
+  } else if (biome === 'cave') {
+    g.fillStyle(pal.groundDark, 0.4);
+    g.fillCircle(8, 10, 3);
+    g.fillCircle(20, 22, 4);
+    g.fillStyle(pal.groundLight, 0.25);
+    g.fillCircle(24, 8, 2);
+  } else {
+    // Saturated grass tuft noise
+    g.fillStyle(pal.groundDark, 0.35);
+    g.fillCircle(7, 9, 2.2);
+    g.fillCircle(18, 20, 2.6);
+    g.fillCircle(26, 11, 1.8);
+    g.fillStyle(pal.groundLight, 0.4);
+    g.fillCircle(12, 24, 2);
+    g.fillCircle(24, 6, 1.6);
+    // Tiny blade ticks
+    g.lineStyle(1.2, pal.groundDark, 0.45);
+    for (let i = 0; i < 5; i++) {
+      const x = 4 + i * 6;
+      g.lineBetween(x, 28, x + 1, 24);
+    }
+  }
 }
 
 function drawTall(g: Phaser.GameObjects.Graphics, biome: Biome) {
   const pal = BIOME_PALETTE[biome];
   drawGround(g, biome);
-  for (let i = 0; i < 6; i++) {
-    const x = 4 + i * 5;
-    const h = 14 + (i % 3) * 3;
-    g.fillStyle(pal.tall, 0.95);
-    g.fillTriangle(x, TILE - 1, x - 3.5, TILE - h, x + 3.5, TILE - h);
-    g.fillStyle(pal.tallTip, 0.9);
-    g.fillTriangle(x, TILE - h + 4, x - 2, TILE - h - 6, x + 2, TILE - h - 6);
+  // Dense BDSP-style tall grass clumps (rounded tops, not triangles)
+  for (let i = 0; i < 5; i++) {
+    const x = 4 + i * 6;
+    const h = 12 + (i % 3) * 3;
+    g.fillStyle(pal.tall, 1);
+    g.fillRoundedRect(x - 2.5, TILE - h, 5, h, 2.5);
+    sphere(g, x, TILE - h + 1, 3.2, pal.tallLight);
   }
+  // Soft highlight sheen
   g.fillStyle(0xffffff, 0.12);
-  g.fillEllipse(TILE / 2, TILE - 18, 22, 8);
+  g.fillEllipse(TILE / 2, TILE - 14, 20, 6);
+}
+
+/** Classic Sinnoh remake pom-pom tree (3 leafy orbs + thick trunk). */
+function drawBdspTree(g: Phaser.GameObjects.Graphics, leaf: number, trunk: number) {
+  ovalShadow(g, TILE / 2, TILE - 3, 20, 5, 0.3);
+  // Trunk
+  g.fillStyle(trunk, 1).fillRoundedRect(TILE / 2 - 3.5, 16, 7, 14, 2);
+  g.fillStyle(shade(trunk, 0.2), 1).fillRect(TILE / 2 - 2.5, 17, 2, 12);
+  // Three pom-pom canopies
+  sphere(g, TILE / 2 - 7, 12, 8, leaf);
+  sphere(g, TILE / 2 + 7, 12, 8, leaf);
+  sphere(g, TILE / 2, 6, 9, shade(leaf, 0.08));
 }
 
 function drawBlock(g: Phaser.GameObjects.Graphics, biome: Biome) {
   const pal = BIOME_PALETTE[biome];
   drawGround(g, biome);
-  softShadow(g, TILE / 2, TILE - 4, 22, 6);
 
   if (biome === 'forest' || biome === 'town' || biome === 'highlands') {
-    g.fillStyle(0x8b6a45, 1).fillRoundedRect(TILE / 2 - 3, TILE - 14, 6, 12, 2);
-    g.fillStyle(pal.block, 1).fillCircle(TILE / 2, 13, 11);
-    g.fillStyle(shade(pal.block, 0.18), 1).fillCircle(TILE / 2 - 3, 10, 7);
-    g.fillStyle(shade(pal.block, 0.35), 0.7).fillCircle(TILE / 2 - 5, 8, 3.5);
-    g.fillStyle(shade(pal.block, -0.25), 0.35).fillCircle(TILE / 2 + 4, 16, 5);
+    drawBdspTree(g, pal.leaf, pal.trunk);
   } else if (biome === 'beach') {
-    g.fillStyle(0xb8895a, 1).fillRoundedRect(TILE / 2 - 2, 14, 4, 14, 2);
-    g.fillStyle(0x66bb6a, 1).fillEllipse(TILE / 2, 12, 22, 12);
-    g.fillStyle(0x81c784, 1).fillEllipse(TILE / 2 - 2, 10, 10, 6);
+    ovalShadow(g, TILE / 2, TILE - 3, 16, 4, 0.25);
+    // Palm: thick trunk lean + 3 green frond orbs
+    g.fillStyle(pal.trunk, 1).fillRoundedRect(TILE / 2 - 2, 12, 4, 16, 2);
+    sphere(g, TILE / 2 - 8, 10, 6, pal.leaf);
+    sphere(g, TILE / 2 + 8, 10, 6, pal.leaf);
+    sphere(g, TILE / 2, 5, 7, shade(pal.leaf, 0.1));
   } else if (biome === 'desert') {
-    g.fillStyle(pal.block, 1).fillRoundedRect(4, 8, TILE - 8, TILE - 12, 8);
-    g.fillStyle(shade(pal.block, 0.2), 1).fillRoundedRect(7, 10, TILE - 16, 8, 5);
-    g.fillStyle(shade(pal.block, -0.2), 0.4).fillRoundedRect(6, 20, TILE - 12, 6, 3);
+    ovalShadow(g, TILE / 2, TILE - 3, 20, 5, 0.25);
+    // Sandstone rock with cliff face
+    g.fillStyle(pal.rock, 1).fillRoundedRect(3, 8, TILE - 6, TILE - 10, 6);
+    g.fillStyle(shade(pal.rock, -0.2), 1).fillRect(3, 20, TILE - 6, 8);
+    g.fillStyle(shade(pal.rock, -0.2), 1).fillRoundedRect(3, 22, TILE - 6, 6, 4);
+    g.fillStyle(shade(pal.rock, 0.25), 1).fillRoundedRect(6, 10, 12, 5, 3);
   } else {
-    g.fillStyle(pal.block, 1).fillRoundedRect(3, 5, TILE - 6, TILE - 8, 7);
-    g.fillStyle(shade(pal.block, 0.22), 1).fillCircle(11, 12, 5);
-    g.fillStyle(shade(pal.block, -0.2), 0.5).fillRoundedRect(8, 20, 16, 6, 3);
+    ovalShadow(g, TILE / 2, TILE - 3, 18, 5, 0.3);
+    // Cave boulder
+    sphere(g, TILE / 2, 16, 11, pal.rock);
+    g.fillStyle(shade(pal.rock, -0.25), 0.5).fillCircle(TILE / 2 + 3, 20, 7);
   }
 }
 
@@ -105,51 +226,70 @@ function drawSpecial(
   kind: 'water' | 'warp' | 'heal' | 'shop' | 'flower' | 'path',
 ) {
   switch (kind) {
-    case 'water':
-      g.fillStyle(0x4ec4f0, 1).fillRect(0, 0, TILE, TILE);
-      g.fillStyle(0x7ad7f5, 0.8).fillEllipse(10, 10, 14, 6);
-      g.fillStyle(0x2eb3e6, 0.7).fillEllipse(22, 22, 16, 5);
-      g.fillStyle(0xffffff, 0.35).fillEllipse(18, 8, 8, 3);
+    case 'water': {
+      // Deep saturated BDSP water
+      g.fillStyle(0x1e88e5, 1).fillRect(0, 0, TILE, TILE);
+      g.fillStyle(0x1565c0, 0.5).fillRect(0, TILE / 2, TILE, TILE / 2);
+      // Caustic sparkles
+      g.fillStyle(0xffffff, 0.85);
+      g.fillCircle(8, 8, 1.4);
+      g.fillCircle(20, 14, 1.1);
+      g.fillCircle(12, 22, 1.3);
+      g.fillCircle(26, 6, 1);
+      // Foam ripples
+      g.fillStyle(0xb3e5fc, 0.55);
+      g.fillEllipse(10, 10, 12, 4);
+      g.fillEllipse(22, 20, 14, 4);
       break;
-    case 'path':
-      g.fillStyle(0xe8c99a, 1).fillRect(0, 0, TILE, TILE);
-      g.fillStyle(0xd9b888, 0.7).fillCircle(8, 12, 2);
-      g.fillStyle(0xf0d8b0, 0.6).fillCircle(22, 20, 2.5);
-      g.fillStyle(0xc9a878, 0.35).fillRect(0, 0, 2, TILE);
-      g.fillStyle(0xc9a878, 0.35).fillRect(TILE - 2, 0, 2, TILE);
+    }
+    case 'path': {
+      g.fillStyle(0xe6c988, 1).fillRect(0, 0, TILE, TILE);
+      g.fillStyle(0xd4b46e, 0.5);
+      g.fillCircle(8, 10, 2);
+      g.fillCircle(20, 22, 2.5);
+      g.fillStyle(0xf5deb0, 0.4);
+      g.fillCircle(24, 8, 1.8);
+      // Soft edge darkening like BDSP path borders
+      g.fillStyle(0xc9a85c, 0.35).fillRect(0, 0, 2, TILE);
+      g.fillStyle(0xc9a85c, 0.35).fillRect(TILE - 2, 0, 2, TILE);
       break;
-    case 'warp':
+    }
+    case 'warp': {
       drawSpecial(g, 'path');
-      softShadow(g, TILE / 2, TILE - 3, 18, 5);
-      g.fillStyle(0xa67c52, 1).fillRoundedRect(TILE / 2 - 2, 10, 4, 18, 2);
-      g.fillStyle(0xc49a6c, 1).fillRoundedRect(5, 4, 22, 12, 4);
-      g.fillStyle(0xfff3d0, 1).fillRoundedRect(7, 6, 18, 8, 3);
-      g.fillStyle(0x8d6e63, 1).fillCircle(TILE / 2, 10, 1.5);
+      ovalShadow(g, TILE / 2, TILE - 2, 14, 4, 0.25);
+      g.fillStyle(0x8d6e45, 1).fillRoundedRect(TILE / 2 - 2, 12, 4, 16, 2);
+      g.fillStyle(0xc4a574, 1).fillRoundedRect(4, 4, 24, 12, 4);
+      g.fillStyle(0xfff8e1, 1).fillRoundedRect(6, 6, 20, 8, 3);
+      g.fillStyle(0x6d4c41, 1).fillCircle(TILE / 2, 10, 1.4);
       break;
-    case 'heal':
+    }
+    case 'heal': {
       drawGround(g, 'town');
-      softShadow(g, TILE / 2, TILE - 3, 20, 5);
-      // Soft pink clinic cottage
-      g.fillStyle(0xffc1cc, 1).fillRoundedRect(4, 10, TILE - 8, 18, 5);
-      g.fillStyle(0xff8a9a, 1).fillTriangle(TILE / 2, 2, 2, 14, TILE - 2, 14);
-      g.fillStyle(0xffffff, 1).fillRect(TILE / 2 - 2, 16, 4, 10);
+      ovalShadow(g, TILE / 2, TILE - 2, 18, 4, 0.28);
+      // Chibi clinic building
+      g.fillStyle(0xffcdd2, 1).fillRoundedRect(4, 12, TILE - 8, 16, 4);
+      g.fillStyle(0xef5350, 1).fillTriangle(TILE / 2, 2, 1, 14, TILE - 1, 14);
+      g.fillStyle(0xffffff, 1).fillRect(TILE / 2 - 2, 16, 4, 9);
       g.fillStyle(0xffffff, 1).fillRect(TILE / 2 - 5, 19, 10, 4);
       break;
-    case 'shop':
+    }
+    case 'shop': {
       drawGround(g, 'town');
-      softShadow(g, TILE / 2, TILE - 3, 20, 5);
-      g.fillStyle(0x81d4fa, 1).fillRoundedRect(4, 10, TILE - 8, 18, 5);
-      g.fillStyle(0x4fc3f7, 1).fillTriangle(TILE / 2, 2, 2, 14, TILE - 2, 14);
-      g.fillStyle(0xfff59d, 1).fillCircle(TILE / 2, 20, 4);
-      g.fillStyle(0xffffff, 0.9).fillRect(8, 16, TILE - 16, 3);
+      ovalShadow(g, TILE / 2, TILE - 2, 18, 4, 0.28);
+      g.fillStyle(0xbbdefb, 1).fillRoundedRect(4, 12, TILE - 8, 16, 4);
+      g.fillStyle(0x1e88e5, 1).fillTriangle(TILE / 2, 2, 1, 14, TILE - 1, 14);
+      g.fillStyle(0xfff176, 1).fillCircle(TILE / 2, 20, 4);
+      g.fillStyle(0xffffff, 0.9).fillRect(7, 16, TILE - 14, 3);
       break;
-    case 'flower':
+    }
+    case 'flower': {
       drawGround(g, 'town');
-      softShadow(g, 10, 24, 8, 3);
-      softShadow(g, 22, 26, 8, 3);
-      drawBloom(g, 10, 14, 0xff8a80);
-      drawBloom(g, 22, 20, 0xffe082);
+      ovalShadow(g, 10, 26, 8, 3, 0.2);
+      ovalShadow(g, 22, 28, 8, 3, 0.2);
+      drawBloom(g, 10, 16, 0xef5350);
+      drawBloom(g, 22, 20, 0xffee58);
       break;
+    }
   }
 }
 
@@ -157,50 +297,68 @@ function drawBloom(g: Phaser.GameObjects.Graphics, x: number, y: number, color: 
   g.fillStyle(0x66bb6a, 1).fillRect(x - 1, y, 2, 8);
   for (let i = 0; i < 5; i++) {
     const a = (i / 5) * Math.PI * 2;
-    g.fillStyle(color, 1).fillCircle(x + Math.cos(a) * 4, y + Math.sin(a) * 4, 3);
+    sphere(g, x + Math.cos(a) * 3.5, y + Math.sin(a) * 3.5, 2.6, color);
   }
-  g.fillStyle(0xfff59d, 1).fillCircle(x, y, 2.2);
+  sphere(g, x, y, 2.2, 0xfff59d);
 }
 
+/**
+ * BDSP chibi player: oversized head, stubby body, soft oval shadow.
+ * Drawn as if viewed from a high angle (diorama).
+ */
 function drawPlayer(g: Phaser.GameObjects.Graphics, dir: 'down' | 'up' | 'left' | 'right') {
-  const W = 28;
-  const H = 32;
-  softShadow(g, W / 2, H - 2, 16, 5);
+  const W = PLAYER_W;
+  const H = PLAYER_H;
+  ovalShadow(g, W / 2, H - 2, 18, 6, 0.32);
 
-  // Legs
+  // Stubby legs
   g.fillStyle(0x5d4037, 1);
-  if (dir === 'left' || dir === 'right') {
-    g.fillRoundedRect(W / 2 - 5, 22, 4, 8, 2);
-    g.fillRoundedRect(W / 2 + 1, 22, 4, 8, 2);
+  g.fillRoundedRect(W / 2 - 7, H - 12, 5, 8, 2);
+  g.fillRoundedRect(W / 2 + 2, H - 12, 5, 8, 2);
+
+  // Tiny cylindrical body (hoodie)
+  g.fillStyle(0x42a5f5, 1).fillRoundedRect(W / 2 - 7, 16, 14, 12, 5);
+  g.fillStyle(shade(0x42a5f5, 0.3), 0.7).fillRoundedRect(W / 2 - 5, 17, 10, 4, 2);
+
+  // HUGE chibi head
+  const hx = W / 2;
+  const hy = 12;
+  const hr = 11;
+  sphere(g, hx, hy, hr, 0xffccbc);
+
+  // Hair bowl (direction-aware)
+  g.fillStyle(0x6d4c41, 1);
+  if (dir === 'up') {
+    g.fillEllipse(hx, hy - 2, 22, 16);
   } else {
-    g.fillRoundedRect(W / 2 - 6, 22, 5, 8, 2);
-    g.fillRoundedRect(W / 2 + 1, 22, 5, 8, 2);
+    g.fillEllipse(hx, hy - 4, 20, 12);
+    // Bangs leave face open
+    g.fillStyle(0xffccbc, 1).fillCircle(hx, hy + 2, 7);
   }
 
-  // Soft hoodie body (AC villager vibe)
-  g.fillStyle(0x64b5f6, 1).fillRoundedRect(5, 12, W - 10, 14, 6);
-  g.fillStyle(shade(0x64b5f6, 0.25), 0.7).fillRoundedRect(7, 13, W - 16, 5, 3);
-
-  // Head
-  g.fillStyle(0xffccbc, 1).fillCircle(W / 2, 9, 8);
-  g.fillStyle(shade(0xffccbc, 0.25), 0.5).fillCircle(W / 2 - 2, 7, 3);
-
-  // Soft hair bowl-cut
-  g.fillStyle(0x6d4c41, 1).fillEllipse(W / 2, 5, 16, 10);
-  if (dir !== 'up') g.fillStyle(0xffccbc, 1).fillCircle(W / 2, 10, 5);
-
   // Eyes
-  g.fillStyle(0x3e2723, 1);
+  if (dir !== 'up') {
+    g.fillStyle(0x3e2723, 1);
+    if (dir === 'down') {
+      g.fillCircle(hx - 3.5, hy + 1, 1.6);
+      g.fillCircle(hx + 3.5, hy + 1, 1.6);
+      g.fillStyle(0xffffff, 1);
+      g.fillCircle(hx - 4, hy + 0.3, 0.6);
+      g.fillCircle(hx + 3, hy + 0.3, 0.6);
+    } else if (dir === 'left') {
+      g.fillCircle(hx - 4, hy + 1, 1.6);
+      g.fillStyle(0xffffff, 1).fillCircle(hx - 4.5, hy + 0.3, 0.55);
+    } else {
+      g.fillCircle(hx + 4, hy + 1, 1.6);
+      g.fillStyle(0xffffff, 1).fillCircle(hx + 3.5, hy + 0.3, 0.55);
+    }
+  }
+
+  // Soft blush
   if (dir === 'down') {
-    g.fillCircle(W / 2 - 3, 10, 1.4);
-    g.fillCircle(W / 2 + 3, 10, 1.4);
-    g.fillStyle(0xffffff, 0.9);
-    g.fillCircle(W / 2 - 3.5, 9.4, 0.5);
-    g.fillCircle(W / 2 + 2.5, 9.4, 0.5);
-  } else if (dir === 'left') {
-    g.fillCircle(W / 2 - 3, 10, 1.4);
-  } else if (dir === 'right') {
-    g.fillCircle(W / 2 + 3, 10, 1.4);
+    g.fillStyle(0xff8a80, 0.4);
+    g.fillCircle(hx - 7, hy + 4, 2);
+    g.fillCircle(hx + 7, hy + 4, 2);
   }
 }
 
@@ -210,7 +368,7 @@ function pickForm(species: Species, seed: number): BodyForm {
   const n = species.name.toLowerCase();
   if (/moth|beetle|spider|dragonfly|fly|bug/.test(n)) return 'bug';
   if (/owl|sparrow|hawk|falcon|ray|bat|wing|kite|puff|avian|lune/.test(n)) return 'bird';
-  if (/serpent|worm|eel|kelp|ray/.test(n) && seed % 2 === 0) return 'serpent';
+  if (/serpent|worm|eel|kelp/.test(n)) return 'serpent';
   if (/drake|wyrm|dragon|newt|salam|infer/.test(n)) return 'drake';
   if (/pup|hound|fox|cat|kit|fawn|boar|ram|colt|cub|otter|seal|frog|crab|penguin|mole|turtle|wolf/.test(n))
     return 'quad';
@@ -226,357 +384,129 @@ function drawCuteEyes(
   ry: number,
   eyeR: number,
 ) {
-  // White
   g.fillStyle(0xffffff, 1);
   g.fillCircle(lx, ly, eyeR);
   g.fillCircle(rx, ry, eyeR);
-  // Soft iris
-  g.fillStyle(0x37474f, 1);
-  g.fillCircle(lx, ly + eyeR * 0.1, eyeR * 0.55);
-  g.fillCircle(rx, ry + eyeR * 0.1, eyeR * 0.55);
-  // Shine (PoGo / AC sparkle)
+  g.fillStyle(0x263238, 1);
+  g.fillCircle(lx, ly + eyeR * 0.08, eyeR * 0.58);
+  g.fillCircle(rx, ry + eyeR * 0.08, eyeR * 0.58);
   g.fillStyle(0xffffff, 1);
-  g.fillCircle(lx - eyeR * 0.25, ly - eyeR * 0.3, eyeR * 0.28);
-  g.fillCircle(rx - eyeR * 0.25, ry - eyeR * 0.3, eyeR * 0.28);
-  g.fillStyle(0xffffff, 0.7);
-  g.fillCircle(lx + eyeR * 0.2, ly + eyeR * 0.25, eyeR * 0.12);
-  g.fillCircle(rx + eyeR * 0.2, ry + eyeR * 0.25, eyeR * 0.12);
-}
-
-function drawCheek(g: Phaser.GameObjects.Graphics, x: number, y: number, r: number) {
-  g.fillStyle(0xff8a80, 0.45);
-  g.fillCircle(x, y, r);
+  g.fillCircle(lx - eyeR * 0.28, ly - eyeR * 0.28, eyeR * 0.3);
+  g.fillCircle(rx - eyeR * 0.28, ry - eyeR * 0.28, eyeR * 0.3);
 }
 
 /**
- * Soft shaded creature sprite — Animal Crossing proportions + Pokémon Go polish.
- * Distinct silhouettes by body form; type colors + stage scale.
+ * BDSP chibi creature: oversized head, stubby body, vinyl-toy shading, oval shadow.
  */
 export function drawCreature(g: Phaser.GameObjects.Graphics, species: Species, size: number) {
   const type = species.types[0];
   const paint = TYPE_PAINT[type];
   const seed = hashString(species.id);
-  const hueJitter = (((seed >> 5) & 0xff) / 255 - 0.5) * 0.15;
+  const hueJitter = (((seed >> 5) & 0xff) / 255 - 0.5) * 0.1;
   const body = shade(paint.body, hueJitter);
   const accent = paint.accent;
   const belly = paint.belly;
-  const dark = shade(body, -0.28);
-  const light = shade(body, 0.28);
+  const dark = shade(body, -0.25);
   const form = pickForm(species, seed);
-  const stageScale = 1 + species.stage * 0.12;
+  const stageScale = 1 + species.stage * 0.1;
 
   const cx = size / 2;
-  const cy = size / 2 + size * 0.04;
-  const R = size * 0.22 * stageScale;
+  const cy = size / 2 + size * 0.06;
+  const R = size * 0.2 * stageScale;
 
-  // Ground shadow
-  softShadow(g, cx, size * 0.88, R * 2.2, R * 0.55);
+  ovalShadow(g, cx, size * 0.9, R * 2.4, R * 0.55, 0.3);
 
-  // Soft outer glow (PoGo catch-feel)
-  g.fillStyle(accent, 0.18);
-  g.fillCircle(cx, cy, R * 1.55);
-
-  // Type accessory behind body
-  drawTypeBack(g, type, form, cx, cy, R, accent, dark);
-
-  switch (form) {
-    case 'bird':
-      drawBird(g, cx, cy, R, body, belly, light, dark, accent);
-      break;
-    case 'bug':
-      drawBug(g, cx, cy, R, body, belly, light, dark, accent);
-      break;
-    case 'serpent':
-      drawSerpent(g, cx, cy, R, body, belly, light, dark, accent);
-      break;
-    case 'drake':
-      drawDrake(g, cx, cy, R, body, belly, light, dark, accent, species.stage);
-      break;
-    case 'quad':
-      drawQuad(g, cx, cy, R, body, belly, light, dark, accent, seed);
-      break;
-    default:
-      drawBlob(g, cx, cy, R, body, belly, light, dark, accent, seed);
-  }
-
-  // Soft white outline ring for PoGo readability
-  g.lineStyle(Math.max(2, size * 0.02), 0xffffff, 0.55);
-  g.strokeCircle(cx, cy - R * 0.05, R * 1.05);
-}
-
-function drawTypeBack(
-  g: Phaser.GameObjects.Graphics,
-  type: ElementType,
-  form: BodyForm,
-  cx: number,
-  cy: number,
-  R: number,
-  accent: number,
-  dark: number,
-) {
-  if (type === 'air' || form === 'bird') {
-    g.fillStyle(accent, 0.9);
-    g.fillEllipse(cx - R * 1.15, cy, R * 0.9, R * 0.45);
-    g.fillEllipse(cx + R * 1.15, cy, R * 0.9, R * 0.45);
-    g.fillStyle(0xffffff, 0.35);
-    g.fillEllipse(cx - R * 1.15, cy - 2, R * 0.45, R * 0.18);
-    g.fillEllipse(cx + R * 1.15, cy - 2, R * 0.45, R * 0.18);
-  }
+  // Type back props
   if (type === 'fire') {
+    g.fillStyle(accent, 1);
+    g.fillTriangle(cx, cy - R * 1.7, cx - R * 0.4, cy - R * 0.85, cx + R * 0.4, cy - R * 0.85);
+    g.fillStyle(0xfff59d, 1);
+    g.fillTriangle(cx, cy - R * 1.35, cx - R * 0.2, cy - R * 0.85, cx + R * 0.2, cy - R * 0.85);
+  }
+  if (type === 'air' || form === 'bird') {
     g.fillStyle(accent, 0.95);
-    g.fillTriangle(cx, cy - R * 1.55, cx - R * 0.45, cy - R * 0.7, cx + R * 0.45, cy - R * 0.7);
-    g.fillStyle(0xfff59d, 0.9);
-    g.fillTriangle(cx, cy - R * 1.25, cx - R * 0.22, cy - R * 0.7, cx + R * 0.22, cy - R * 0.7);
+    g.fillEllipse(cx - R * 1.2, cy + R * 0.1, R * 0.95, R * 0.4);
+    g.fillEllipse(cx + R * 1.2, cy + R * 0.1, R * 0.95, R * 0.4);
   }
   if (type === 'darkness') {
-    g.fillStyle(dark, 0.85);
-    g.fillTriangle(cx - R * 0.55, cy - R * 0.9, cx - R * 0.25, cy - R * 1.45, cx - R * 0.05, cy - R * 0.9);
-    g.fillTriangle(cx + R * 0.55, cy - R * 0.9, cx + R * 0.25, cy - R * 1.45, cx + R * 0.05, cy - R * 0.9);
-  }
-}
-
-function drawBlob(
-  g: Phaser.GameObjects.Graphics,
-  cx: number,
-  cy: number,
-  R: number,
-  body: number,
-  belly: number,
-  light: number,
-  dark: number,
-  accent: number,
-  seed: number,
-) {
-  // Ears
-  const ear = (seed >> 2) % 3;
-  if (ear === 0) {
-    g.fillStyle(body, 1);
-    g.fillEllipse(cx - R * 0.7, cy - R * 0.85, R * 0.4, R * 0.55);
-    g.fillEllipse(cx + R * 0.7, cy - R * 0.85, R * 0.4, R * 0.55);
-    g.fillStyle(accent, 0.8);
-    g.fillEllipse(cx - R * 0.7, cy - R * 0.8, R * 0.18, R * 0.28);
-    g.fillEllipse(cx + R * 0.7, cy - R * 0.8, R * 0.18, R * 0.28);
-  } else if (ear === 1) {
-    g.fillStyle(body, 1);
-    g.fillCircle(cx - R * 0.75, cy - R * 0.7, R * 0.32);
-    g.fillCircle(cx + R * 0.75, cy - R * 0.7, R * 0.32);
+    g.fillStyle(dark, 1);
+    g.fillTriangle(cx - R * 0.5, cy - R * 0.95, cx - R * 0.25, cy - R * 1.5, cx - R * 0.05, cy - R * 0.95);
+    g.fillTriangle(cx + R * 0.5, cy - R * 0.95, cx + R * 0.25, cy - R * 1.5, cx + R * 0.05, cy - R * 0.95);
   }
 
-  g.fillStyle(body, 1).fillCircle(cx, cy, R);
-  g.fillStyle(light, 0.55).fillCircle(cx - R * 0.3, cy - R * 0.35, R * 0.45);
-  g.fillStyle(belly, 1).fillEllipse(cx, cy + R * 0.35, R * 1.1, R * 0.85);
-  g.fillStyle(dark, 0.25).fillEllipse(cx + R * 0.25, cy + R * 0.45, R * 0.55, R * 0.4);
+  // Stubby body (small relative to head — chibi)
+  const bodyY = cy + R * 0.45;
+  if (form === 'serpent') {
+    g.fillStyle(body, 1);
+    g.fillEllipse(cx + R * 0.5, bodyY + R * 0.2, R * 1.4, R * 0.5);
+    sphere(g, cx - R * 0.1, bodyY - R * 0.1, R * 0.55, body);
+  } else {
+    sphere(g, cx, bodyY, R * 0.7, body);
+    g.fillStyle(belly, 1).fillEllipse(cx, bodyY + R * 0.15, R * 0.85, R * 0.55);
+  }
 
   // Tiny feet
-  g.fillStyle(dark, 0.9);
-  g.fillEllipse(cx - R * 0.45, cy + R * 0.85, R * 0.35, R * 0.22);
-  g.fillEllipse(cx + R * 0.45, cy + R * 0.85, R * 0.35, R * 0.22);
-
-  const eyeR = R * 0.22;
-  drawCuteEyes(g, cx - R * 0.35, cy - R * 0.1, cx + R * 0.35, cy - R * 0.1, eyeR);
-  drawCheek(g, cx - R * 0.7, cy + R * 0.2, R * 0.16);
-  drawCheek(g, cx + R * 0.7, cy + R * 0.2, R * 0.16);
-
-  // Smile
-  g.lineStyle(Math.max(1.5, R * 0.08), dark, 0.7);
-  g.beginPath();
-  g.arc(cx, cy + R * 0.25, R * 0.28, 0.15 * Math.PI, 0.85 * Math.PI, false);
-  g.strokePath();
-}
-
-function drawQuad(
-  g: Phaser.GameObjects.Graphics,
-  cx: number,
-  cy: number,
-  R: number,
-  body: number,
-  belly: number,
-  light: number,
-  dark: number,
-  accent: number,
-  seed: number,
-) {
-  // Tail
-  g.fillStyle(body, 1);
-  g.fillEllipse(cx + R * 1.1, cy + R * 0.2, R * 0.7, R * 0.28);
-  g.fillStyle(accent, 0.8).fillCircle(cx + R * 1.45, cy + R * 0.15, R * 0.22);
-
-  // Legs
-  g.fillStyle(dark, 0.95);
-  g.fillRoundedRect(cx - R * 0.75, cy + R * 0.35, R * 0.32, R * 0.7, R * 0.12);
-  g.fillRoundedRect(cx + R * 0.4, cy + R * 0.35, R * 0.32, R * 0.7, R * 0.12);
-  g.fillRoundedRect(cx - R * 0.35, cy + R * 0.45, R * 0.28, R * 0.55, R * 0.1);
-  g.fillRoundedRect(cx + R * 0.05, cy + R * 0.45, R * 0.28, R * 0.55, R * 0.1);
-
-  // Body
-  g.fillStyle(body, 1).fillEllipse(cx, cy + R * 0.15, R * 1.5, R * 1.05);
-  g.fillStyle(belly, 1).fillEllipse(cx, cy + R * 0.35, R * 1.0, R * 0.7);
-  g.fillStyle(light, 0.5).fillEllipse(cx - R * 0.35, cy - R * 0.15, R * 0.6, R * 0.4);
-
-  // Head
-  g.fillStyle(body, 1).fillCircle(cx - R * 0.15, cy - R * 0.55, R * 0.72);
-  g.fillStyle(light, 0.45).fillCircle(cx - R * 0.35, cy - R * 0.75, R * 0.28);
-
-  // Ears (cat vs dog from seed)
-  if (seed % 2 === 0) {
-    g.fillStyle(body, 1);
-    g.fillTriangle(cx - R * 0.7, cy - R * 0.9, cx - R * 0.45, cy - R * 1.45, cx - R * 0.2, cy - R * 0.95);
-    g.fillTriangle(cx + R * 0.2, cy - R * 0.95, cx + R * 0.45, cy - R * 1.45, cx + R * 0.7, cy - R * 0.9);
-    g.fillStyle(accent, 0.85);
-    g.fillTriangle(cx - R * 0.55, cy - R * 1.0, cx - R * 0.45, cy - R * 1.28, cx - R * 0.32, cy - R * 1.0);
-    g.fillTriangle(cx + R * 0.32, cy - R * 1.0, cx + R * 0.45, cy - R * 1.28, cx + R * 0.55, cy - R * 1.0);
-  } else {
-    g.fillStyle(body, 1);
-    g.fillEllipse(cx - R * 0.55, cy - R * 1.05, R * 0.28, R * 0.4);
-    g.fillEllipse(cx + R * 0.35, cy - R * 1.05, R * 0.28, R * 0.4);
+  if (form !== 'serpent' && form !== 'bird') {
+    g.fillStyle(dark, 1);
+    g.fillEllipse(cx - R * 0.4, bodyY + R * 0.65, R * 0.32, R * 0.18);
+    g.fillEllipse(cx + R * 0.4, bodyY + R * 0.65, R * 0.32, R * 0.18);
+  }
+  if (form === 'bird') {
+    g.fillStyle(accent, 1);
+    g.fillRoundedRect(cx - R * 0.35, bodyY + R * 0.55, R * 0.18, R * 0.28, 2);
+    g.fillRoundedRect(cx + R * 0.18, bodyY + R * 0.55, R * 0.18, R * 0.28, 2);
   }
 
-  const eyeR = R * 0.18;
-  drawCuteEyes(g, cx - R * 0.4, cy - R * 0.55, cx + R * 0.1, cy - R * 0.55, eyeR);
-  drawCheek(g, cx - R * 0.65, cy - R * 0.25, R * 0.12);
-  drawCheek(g, cx + R * 0.35, cy - R * 0.25, R * 0.12);
+  // OVERSIZED head (BDSP chibi)
+  const headR = R * 0.95;
+  const headY = cy - R * 0.35;
+  sphere(g, cx, headY, headR, body);
 
-  // Nose
-  g.fillStyle(0x5d4037, 1).fillEllipse(cx - R * 0.12, cy - R * 0.28, R * 0.12, R * 0.08);
-}
+  // Ears / features by form
+  if (form === 'quad' || form === 'blob') {
+    if (seed % 2 === 0) {
+      // Pointy ears
+      g.fillStyle(body, 1);
+      g.fillTriangle(cx - headR * 0.7, headY - headR * 0.3, cx - headR * 0.45, headY - headR * 1.15, cx - headR * 0.15, headY - headR * 0.45);
+      g.fillTriangle(cx + headR * 0.7, headY - headR * 0.3, cx + headR * 0.45, headY - headR * 1.15, cx + headR * 0.15, headY - headR * 0.45);
+      g.fillStyle(accent, 0.9);
+      g.fillTriangle(cx - headR * 0.55, headY - headR * 0.45, cx - headR * 0.45, headY - headR * 0.95, cx - headR * 0.3, headY - headR * 0.5);
+      g.fillTriangle(cx + headR * 0.55, headY - headR * 0.45, cx + headR * 0.45, headY - headR * 0.95, cx + headR * 0.3, headY - headR * 0.5);
+    } else {
+      sphere(g, cx - headR * 0.7, headY - headR * 0.55, headR * 0.28, body);
+      sphere(g, cx + headR * 0.7, headY - headR * 0.55, headR * 0.28, body);
+    }
+  }
+  if (form === 'drake') {
+    g.fillStyle(accent, 1);
+    g.fillTriangle(cx - headR * 0.35, headY - headR * 0.6, cx - headR * 0.5, headY - headR * 1.25, cx - headR * 0.05, headY - headR * 0.7);
+    g.fillTriangle(cx + headR * 0.35, headY - headR * 0.6, cx + headR * 0.5, headY - headR * 1.25, cx + headR * 0.05, headY - headR * 0.7);
+  }
+  if (form === 'bug') {
+    g.lineStyle(2, dark, 1);
+    g.lineBetween(cx - headR * 0.25, headY - headR * 0.7, cx - headR * 0.6, headY - headR * 1.2);
+    g.lineBetween(cx + headR * 0.25, headY - headR * 0.7, cx + headR * 0.6, headY - headR * 1.2);
+    sphere(g, cx - headR * 0.6, headY - headR * 1.2, headR * 0.12, accent);
+    sphere(g, cx + headR * 0.6, headY - headR * 1.2, headR * 0.12, accent);
+  }
+  if (form === 'bird') {
+    g.fillStyle(accent, 1);
+    g.fillTriangle(cx, headY + headR * 0.15, cx + headR * 0.55, headY, cx, headY - headR * 0.1);
+    g.fillTriangle(cx, headY - headR * 1.15, cx - headR * 0.22, headY - headR * 0.7, cx + headR * 0.22, headY - headR * 0.7);
+  }
 
-function drawBird(
-  g: Phaser.GameObjects.Graphics,
-  cx: number,
-  cy: number,
-  R: number,
-  body: number,
-  belly: number,
-  light: number,
-  _dark: number,
-  accent: number,
-) {
-  // Wings already in type back for air; add body wings for others
-  g.fillStyle(body, 1);
-  g.fillEllipse(cx - R * 0.95, cy + R * 0.1, R * 0.7, R * 0.35);
-  g.fillEllipse(cx + R * 0.95, cy + R * 0.1, R * 0.7, R * 0.35);
+  // Face
+  const eyeR = headR * 0.22;
+  drawCuteEyes(g, cx - headR * 0.35, headY - headR * 0.05, cx + headR * 0.35, headY - headR * 0.05, eyeR);
+  g.fillStyle(0xff8a80, 0.45);
+  g.fillCircle(cx - headR * 0.65, headY + headR * 0.25, headR * 0.16);
+  g.fillCircle(cx + headR * 0.65, headY + headR * 0.25, headR * 0.16);
 
-  g.fillStyle(body, 1).fillEllipse(cx, cy + R * 0.15, R * 1.15, R * 1.05);
-  g.fillStyle(belly, 1).fillEllipse(cx, cy + R * 0.35, R * 0.75, R * 0.7);
-  g.fillStyle(light, 0.5).fillEllipse(cx - R * 0.25, cy - R * 0.15, R * 0.45, R * 0.35);
-
-  // Head
-  g.fillStyle(body, 1).fillCircle(cx, cy - R * 0.55, R * 0.62);
-  // Beak
-  g.fillStyle(accent, 1).fillTriangle(cx, cy - R * 0.4, cx + R * 0.45, cy - R * 0.5, cx, cy - R * 0.6);
-  // Crest
-  g.fillStyle(accent, 0.95).fillTriangle(cx, cy - R * 1.25, cx - R * 0.25, cy - R * 0.9, cx + R * 0.25, cy - R * 0.9);
-
-  // Feet
-  g.fillStyle(accent, 1);
-  g.fillRoundedRect(cx - R * 0.4, cy + R * 0.9, R * 0.2, R * 0.25, 2);
-  g.fillRoundedRect(cx + R * 0.2, cy + R * 0.9, R * 0.2, R * 0.25, 2);
-
-  const eyeR = R * 0.18;
-  drawCuteEyes(g, cx - R * 0.28, cy - R * 0.65, cx + R * 0.28, cy - R * 0.65, eyeR);
-}
-
-function drawBug(
-  g: Phaser.GameObjects.Graphics,
-  cx: number,
-  cy: number,
-  R: number,
-  body: number,
-  belly: number,
-  light: number,
-  dark: number,
-  accent: number,
-) {
-  // Wings
-  g.fillStyle(accent, 0.55);
-  g.fillEllipse(cx - R * 0.9, cy - R * 0.2, R * 0.85, R * 0.5);
-  g.fillEllipse(cx + R * 0.9, cy - R * 0.2, R * 0.85, R * 0.5);
-  g.fillStyle(0xffffff, 0.35);
-  g.fillEllipse(cx - R * 0.9, cy - R * 0.3, R * 0.4, R * 0.22);
-  g.fillEllipse(cx + R * 0.9, cy - R * 0.3, R * 0.4, R * 0.22);
-
-  // Abdomen + thorax
-  g.fillStyle(body, 1).fillEllipse(cx, cy + R * 0.25, R * 1.1, R * 0.95);
-  g.fillStyle(belly, 1).fillEllipse(cx, cy + R * 0.4, R * 0.7, R * 0.55);
-  g.fillStyle(body, 1).fillCircle(cx, cy - R * 0.45, R * 0.55);
-  g.fillStyle(light, 0.5).fillCircle(cx - R * 0.2, cy - R * 0.6, R * 0.22);
-
-  // Antennae
-  g.lineStyle(2, dark, 0.9);
-  g.lineBetween(cx - R * 0.2, cy - R * 0.9, cx - R * 0.55, cy - R * 1.35);
-  g.lineBetween(cx + R * 0.2, cy - R * 0.9, cx + R * 0.55, cy - R * 1.35);
-  g.fillStyle(accent, 1);
-  g.fillCircle(cx - R * 0.55, cy - R * 1.35, R * 0.12);
-  g.fillCircle(cx + R * 0.55, cy - R * 1.35, R * 0.12);
-
-  const eyeR = R * 0.2;
-  drawCuteEyes(g, cx - R * 0.28, cy - R * 0.5, cx + R * 0.28, cy - R * 0.5, eyeR);
-}
-
-function drawSerpent(
-  g: Phaser.GameObjects.Graphics,
-  cx: number,
-  cy: number,
-  R: number,
-  body: number,
-  belly: number,
-  light: number,
-  dark: number,
-  accent: number,
-) {
-  g.fillStyle(body, 1);
-  g.fillEllipse(cx + R * 0.6, cy + R * 0.55, R * 1.3, R * 0.55);
-  g.fillEllipse(cx - R * 0.2, cy + R * 0.15, R * 1.1, R * 0.6);
-  g.fillStyle(belly, 1).fillEllipse(cx - R * 0.1, cy + R * 0.3, R * 0.7, R * 0.35);
-  g.fillStyle(body, 1).fillCircle(cx - R * 0.35, cy - R * 0.35, R * 0.7);
-  g.fillStyle(light, 0.5).fillCircle(cx - R * 0.55, cy - R * 0.55, R * 0.28);
-  g.fillStyle(accent, 1).fillTriangle(cx - R * 0.35, cy - R * 0.15, cx - R * 0.95, cy - R * 0.25, cx - R * 0.35, cy - R * 0.4);
-
-  const eyeR = R * 0.18;
-  drawCuteEyes(g, cx - R * 0.6, cy - R * 0.45, cx - R * 0.15, cy - R * 0.4, eyeR);
-  g.fillStyle(dark, 0.5).fillCircle(cx + R * 1.1, cy + R * 0.55, R * 0.18);
-}
-
-function drawDrake(
-  g: Phaser.GameObjects.Graphics,
-  cx: number,
-  cy: number,
-  R: number,
-  body: number,
-  belly: number,
-  light: number,
-  dark: number,
-  accent: number,
-  stage: number,
-) {
-  // Wings
-  g.fillStyle(accent, 0.85);
-  g.fillTriangle(cx - R * 0.4, cy - R * 0.2, cx - R * 1.5, cy - R * 0.9, cx - R * 1.1, cy + R * 0.4);
-  g.fillTriangle(cx + R * 0.4, cy - R * 0.2, cx + R * 1.5, cy - R * 0.9, cx + R * 1.1, cy + R * 0.4);
-  g.fillStyle(0xffffff, 0.25);
-  g.fillTriangle(cx - R * 0.5, cy - R * 0.15, cx - R * 1.2, cy - R * 0.55, cx - R * 0.9, cy + R * 0.1);
-
-  // Body
-  g.fillStyle(body, 1).fillEllipse(cx, cy + R * 0.1, R * 1.35, R * 1.0);
-  g.fillStyle(belly, 1).fillEllipse(cx, cy + R * 0.3, R * 0.9, R * 0.65);
-  g.fillStyle(light, 0.45).fillEllipse(cx - R * 0.3, cy - R * 0.2, R * 0.5, R * 0.35);
-
-  // Head
-  g.fillStyle(body, 1).fillCircle(cx + R * 0.15, cy - R * 0.55, R * 0.65);
-  // Horns (more with stage)
-  g.fillStyle(accent, 1);
-  g.fillTriangle(cx - R * 0.1, cy - R * 0.9, cx - R * 0.25, cy - R * (1.3 + stage * 0.15), cx + R * 0.05, cy - R * 0.95);
-  g.fillTriangle(cx + R * 0.35, cy - R * 0.9, cx + R * 0.5, cy - R * (1.3 + stage * 0.15), cx + R * 0.2, cy - R * 0.95);
-
-  // Legs
-  g.fillStyle(dark, 0.95);
-  g.fillRoundedRect(cx - R * 0.7, cy + R * 0.5, R * 0.3, R * 0.55, 3);
-  g.fillRoundedRect(cx + R * 0.35, cy + R * 0.5, R * 0.3, R * 0.55, 3);
-
-  const eyeR = R * 0.17;
-  drawCuteEyes(g, cx - R * 0.05, cy - R * 0.6, cx + R * 0.4, cy - R * 0.6, eyeR);
-  drawCheek(g, cx - R * 0.2, cy - R * 0.25, R * 0.1);
-  drawCheek(g, cx + R * 0.5, cy - R * 0.25, R * 0.1);
+  // Tiny smile
+  g.lineStyle(Math.max(1.5, headR * 0.08), dark, 0.65);
+  g.beginPath();
+  g.arc(cx, headY + headR * 0.3, headR * 0.22, 0.15 * Math.PI, 0.85 * Math.PI, false);
+  g.strokePath();
 }
 
 export function generateAllTextures(scene: Phaser.Scene) {
@@ -598,38 +528,46 @@ export function generateAllTextures(scene: Phaser.Scene) {
   );
 
   (['down', 'up', 'left', 'right'] as const).forEach((dir) =>
-    make(`player_${dir}`, 28, 32, () => drawPlayer(g, dir)),
+    make(`player_${dir}`, PLAYER_W, PLAYER_H, () => drawPlayer(g, dir)),
   );
 
-  // Soft battle sky / ground strips for PoGo-style encounter backdrop
+  // Standalone shadow for world entities
+  make('soft_shadow', 40, 16, () => {
+    ovalShadow(g, 20, 8, 36, 12, 0.35);
+  });
+
+  // BDSP-bright battle backdrop
   make('battle_sky', 448, 180, () => {
     for (let y = 0; y < 180; y++) {
       const t = y / 180;
-      const c = shade(0x9ad4f5, -t * 0.25);
+      // Bright sunny blue → lighter horizon
+      const c = shade(0x64b5f6, t * 0.35);
       g.fillStyle(c, 1).fillRect(0, y, 448, 2);
     }
-    // Soft clouds
-    g.fillStyle(0xffffff, 0.45);
-    g.fillEllipse(80, 40, 90, 28);
-    g.fillEllipse(120, 36, 70, 24);
-    g.fillEllipse(320, 50, 110, 30);
-    g.fillEllipse(360, 46, 70, 22);
+    g.fillStyle(0xffffff, 0.55);
+    g.fillEllipse(90, 42, 100, 30);
+    g.fillEllipse(130, 38, 70, 24);
+    g.fillEllipse(330, 48, 120, 32);
+    g.fillEllipse(370, 44, 70, 22);
+    // Soft sun glow
+    g.fillStyle(0xfff59d, 0.35).fillCircle(400, 24, 28);
+    g.fillStyle(0xffee58, 0.5).fillCircle(400, 24, 14);
   });
   make('battle_ground', 448, 140, () => {
     for (let y = 0; y < 140; y++) {
       const t = y / 140;
-      const c = shade(0x8fd67a, -t * 0.35);
+      const c = shade(0x66bb6a, -t * 0.25);
       g.fillStyle(c, 1).fillRect(0, y, 448, 2);
     }
-    g.fillStyle(0x6fbf6a, 0.35);
-    for (let i = 0; i < 18; i++) {
-      g.fillCircle(20 + i * 24, 30 + (i % 3) * 20, 6 + (i % 4));
+    g.fillStyle(0x43a047, 0.3);
+    for (let i = 0; i < 20; i++) {
+      g.fillCircle(16 + i * 22, 24 + (i % 4) * 18, 5 + (i % 3));
     }
   });
   make('battle_ring', 140, 40, () => {
-    g.fillStyle(0x2a3a2a, 0.2).fillEllipse(70, 22, 130, 28);
-    g.fillStyle(0xffffff, 0.55).fillEllipse(70, 20, 120, 22);
-    g.fillStyle(0xe8f5e9, 0.9).fillEllipse(70, 20, 100, 16);
+    ovalShadow(g, 70, 22, 128, 28, 0.25);
+    g.fillStyle(0xffffff, 0.4).fillEllipse(70, 18, 110, 18);
+    g.fillStyle(0xe8f5e9, 0.75).fillEllipse(70, 18, 90, 12);
   });
 
   SPECIES_LIST.forEach((sp) => {

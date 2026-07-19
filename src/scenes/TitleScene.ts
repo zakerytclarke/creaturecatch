@@ -11,20 +11,17 @@ export class TitleScene extends Phaser.Scene {
   }
 
   create() {
-    this.cameras.main.setBackgroundColor('#9ad4f5');
-    // Soft sky + grass backdrop
-    if (this.textures.exists('battle_sky')) {
-      this.add.image(GAME_WIDTH / 2, 90, 'battle_sky');
-      this.add.image(GAME_WIDTH / 2, 250, 'battle_ground');
-    }
+    this.cameras.main.setBackgroundColor('#64b5f6');
+    this.add.image(GAME_WIDTH / 2, 90, 'battle_sky');
+    this.add.image(GAME_WIDTH / 2, 250, 'battle_ground');
 
     const brand = label(this, GAME_WIDTH / 2, 36, 'Creature Catch', {
       size: 30,
       bold: true,
-      color: '#fff8ef',
+      color: '#ffffff',
     });
     brand.setOrigin(0.5);
-    brand.setShadow(0, 3, '#5d4e37', 0.35, true, true);
+    brand.setShadow(0, 3, '#1565c0', 0.35, true, true);
 
     const s = label(this, GAME_WIDTH / 2, 68, 'Explore · Catch · Grow', {
       size: 13,

@@ -6,11 +6,11 @@ export const TYPE_META: Record<
   ElementType,
   { name: string; color: number; cssColor: string }
 > = {
-    fire: { name: 'Fire', color: 0xff8a65, cssColor: '#ff8a65' },
-  earth: { name: 'Earth', color: 0xa1887f, cssColor: '#a1887f' },
-  air: { name: 'Air', color: 0x90caf9, cssColor: '#64b5f6' },
-  water: { name: 'Water', color: 0x4fc3f7, cssColor: '#29b6f6' },
-  darkness: { name: 'Darkness', color: 0x9575cd, cssColor: '#9575cd' },
+    fire: { name: 'Fire', color: 0xff7043, cssColor: '#ff7043' },
+  earth: { name: 'Earth', color: 0xa1887f, cssColor: '#8d6e63' },
+  air: { name: 'Air', color: 0x64b5f6, cssColor: '#42a5f5' },
+  water: { name: 'Water', color: 0x29b6f6, cssColor: '#1e88e5' },
+  darkness: { name: 'Darkness', color: 0x7e57c2, cssColor: '#7e57c2' },
 };
 
 // Balanced pentagon: each attacking type is super effective (2x) against the next two

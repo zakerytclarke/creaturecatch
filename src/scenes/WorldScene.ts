@@ -42,7 +42,15 @@ export class WorldScene extends Phaser.Scene {
     const regionId = Game.save.player.regionId;
     const region = getRegion(regionId);
     this.map = generateMap(regionId);
-    this.cameras.main.setBackgroundColor(regionId === 'cave' ? '#2a2438' : '#9ad4f5');
+    const skyByBiome: Record<string, string> = {
+      town: '#87ceeb',
+      forest: '#7ec8e8',
+      beach: '#6ec6f0',
+      desert: '#f0d9a0',
+      highlands: '#8ec8f0',
+      cave: '#2a2438',
+    };
+    this.cameras.main.setBackgroundColor(skyByBiome[regionId] ?? '#87ceeb');
 
     this.renderMap();
 

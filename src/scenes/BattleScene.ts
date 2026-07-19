@@ -94,7 +94,7 @@ export class BattleScene extends Phaser.Scene {
 
   // ---------- Scene drawing ----------
   private drawScene() {
-    this.cameras.main.setBackgroundColor('#9ad4f5');
+    this.cameras.main.setBackgroundColor('#64b5f6');
     this.add.image(GAME_WIDTH / 2, 90, 'battle_sky');
     this.add.image(GAME_WIDTH / 2, 230, 'battle_ground');
 

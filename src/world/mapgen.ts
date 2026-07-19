@@ -63,6 +63,19 @@ function generateTown(): MapData {
   for (let x = 3; x < width - 3; x++) tiles[Math.floor(height / 2)][x] = T.PATH;
   for (let y = 3; y < height - 3; y++) tiles[y][Math.floor(width / 2)] = T.PATH;
 
+  // BDSP-style tree clusters in the grassy yards (pom-pom trees)
+  const treeSpots = [
+    [3, 3], [4, 3], [3, 5],
+    [16, 3], [15, 3], [16, 5],
+    [3, 10], [4, 11], [3, 12],
+    [16, 10], [15, 11], [16, 12],
+    [8, 3], [11, 3],
+    [8, 11], [11, 11],
+  ];
+  treeSpots.forEach(([x, y]) => {
+    if (tiles[y][x] === T.GROUND) tiles[y][x] = T.BLOCK;
+  });
+
   // buildings
   const heal = { x: 5, y: 4 };
   const shop = { x: 14, y: 4 };
@@ -72,7 +85,10 @@ function generateTown(): MapData {
   // decorative flowers
   tiles[10][6] = T.FLOWER;
   tiles[10][13] = T.FLOWER;
-  tiles[4][10] = T.FLOWER;
+  tiles[5][9] = T.FLOWER;
+  tiles[5][11] = T.FLOWER;
+  tiles[9][4] = T.FLOWER;
+  tiles[9][15] = T.FLOWER;
 
   // Region warps around the town edges.
   const warps: WarpPoint[] = [
@@ -107,12 +123,22 @@ function generateWild(regionId: string): MapData {
 
   const useWater = region.biome === 'beach';
 
-  // scatter obstacles
-  const obstacleCount = 22;
+  // Beach: sparkling water shoreline along the top (BDSP route vibes)
+  if (useWater) {
+    for (let x = 1; x < width - 1; x++) {
+      tiles[1][x] = T.WATER;
+      tiles[2][x] = T.WATER;
+      if (rng.chance(0.4)) tiles[3][x] = T.WATER;
+    }
+  }
+
+  // scatter trees / rocks (more trees for forest/town-like biomes)
+  const obstacleCount = region.biome === 'forest' || region.biome === 'highlands' ? 34 : 22;
   for (let i = 0; i < obstacleCount; i++) {
     const x = rng.int(2, width - 3);
-    const y = rng.int(2, height - 3);
-    tiles[y][x] = useWater && rng.chance(0.5) ? T.WATER : T.BLOCK;
+    const y = rng.int(useWater ? 4 : 2, height - 3);
+    if (tiles[y][x] !== T.GROUND) continue;
+    tiles[y][x] = useWater && rng.chance(0.35) ? T.WATER : T.BLOCK;
   }
 
   // grass clusters

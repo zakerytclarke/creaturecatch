@@ -12,7 +12,7 @@ export const GAME_HEIGHT = 320;
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
   parent: 'game',
-  backgroundColor: '#9ad4f5',
+  backgroundColor: '#87ceeb',
   pixelArt: false,
   roundPixels: false,
   width: GAME_WIDTH,

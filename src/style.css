@@ -1,5 +1,5 @@
 :root {
-  --cc-bg: #8ec8e8;
+  --cc-bg: #64b5f6;
 }
 
 * {
@@ -11,7 +11,7 @@ body {
   margin: 0;
   padding: 0;
   height: 100%;
-  background: radial-gradient(ellipse at top, #b8e0f5 0%, #8ec8e8 55%, #7ec6a8 100%);
+  background: radial-gradient(ellipse at top, #90caf9 0%, #64b5f6 50%, #66bb6a 100%);
   overflow: hidden;
   font-family: 'Nunito', 'Trebuchet MS', 'Segoe UI', system-ui, sans-serif;
   -webkit-tap-highlight-color: transparent;
@@ -34,5 +34,5 @@ canvas {
   image-rendering: auto;
   touch-action: none;
   border-radius: 12px;
-  box-shadow: 0 12px 40px rgba(45, 60, 50, 0.28);
+  box-shadow: 0 12px 40px rgba(21, 101, 192, 0.28);
 }
