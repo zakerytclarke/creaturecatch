@@ -2,15 +2,23 @@ import Phaser from 'phaser';
 import { GAME_WIDTH, GAME_HEIGHT } from '../main';
 import { Game } from '../state/game';
 import { getRegion } from '../data/regions';
-import { generateMap, MapData, T, WALKABLE } from '../world/mapgen';
+import {
+  generateWorld,
+  MapData,
+  T,
+  WALKABLE,
+  regionIdAt,
+  biomeAt,
+} from '../world/mapgen';
 import { TILE } from '../gfx/textures';
 import { VirtualJoystick } from '../input/VirtualJoystick';
 import { Button, label } from '../ui/ui';
 import { createInstance } from '../entities/CreatureInstance';
-import { rollEncounter, pickSpawn } from '../systems/encounters';
+import { rollWorldEncounter } from '../systems/encounters';
 import { BattleData } from './BattleScene';
 
-const STEP_MS = 150;
+const STEP_MS = 140;
+const CHUNK_PAD = 2; // extra tiles around the camera
 
 const FACING: Record<string, { dx: number; dy: number; tex: string }> = {
   down: { dx: 0, dy: 1, tex: 'player_down' },
@@ -18,6 +26,13 @@ const FACING: Record<string, { dx: number; dy: number; tex: string }> = {
   left: { dx: -1, dy: 0, tex: 'player_left' },
   right: { dx: 1, dy: 0, tex: 'player_right' },
 };
+
+/** Cache the heavy procedural world across scene restarts. */
+let CACHED_WORLD: MapData | null = null;
+function getWorld(): MapData {
+  if (!CACHED_WORLD) CACHED_WORLD = generateWorld();
+  return CACHED_WORLD;
+}
 
 export class WorldScene extends Phaser.Scene {
   private map!: MapData;
@@ -31,53 +46,51 @@ export class WorldScene extends Phaser.Scene {
   private regionLabel!: Phaser.GameObjects.Text;
   private moneyLabel!: Phaser.GameObjects.Text;
   private toast?: Phaser.GameObjects.Container;
-  private bossSprite?: Phaser.GameObjects.Container;
+  private bossSprites = new Map<string, Phaser.GameObjects.Container>();
   private interactCooldown = 0;
+
+  /** Chunked tile sprites: key = "x,y" */
+  private tileSprites = new Map<string, Phaser.GameObjects.Image>();
+  private lastChunkKey = '';
 
   constructor() {
     super('World');
   }
 
   create() {
-    const regionId = Game.save.player.regionId;
-    const region = getRegion(regionId);
-    this.map = generateMap(regionId);
-    const skyByBiome: Record<string, string> = {
-      town: '#87ceeb',
-      forest: '#7ec8e8',
-      beach: '#6ec6f0',
-      desert: '#f0d9a0',
-      highlands: '#8ec8f0',
-      cave: '#2a2438',
-    };
-    this.cameras.main.setBackgroundColor(skyByBiome[regionId] ?? '#87ceeb');
-
-    this.renderMap();
+    this.map = getWorld();
+    this.cameras.main.setRoundPixels(true);
+    this.cameras.main.setBackgroundColor('#87ceeb');
 
     this.tileX = Game.save.player.tileX;
     this.tileY = Game.save.player.tileY;
-    if (!this.isInside(this.tileX, this.tileY)) {
+    if (!this.isInside(this.tileX, this.tileY) || this.tileX < 4) {
+      // Migrate tiny old saves / bad coords onto the plaza.
       this.tileX = this.map.spawnX;
       this.tileY = this.map.spawnY;
+      Game.save.player.tileX = this.tileX;
+      Game.save.player.tileY = this.tileY;
+      Game.save.player.regionId = 'town';
     }
 
     this.player = this.add
       .image(this.px(this.tileX), this.py(this.tileY), 'player_down')
       .setDepth(50);
 
-    const w = this.map.width * TILE;
-    const h = this.map.height * TILE;
-    this.cameras.main.setBounds(0, 0, w, h);
-    this.cameras.main.startFollow(this.player, true, 0.15, 0.15);
+    this.cameras.main.setBounds(0, 0, this.map.width * TILE, this.map.height * TILE);
+    this.cameras.main.startFollow(this.player, true, 0.2, 0.2);
+    this.cameras.main.centerOn(this.player.x, this.player.y);
 
-    this.setupBoss(region);
+    this.refreshChunks(true);
+    this.setupBosses();
     this.setupInput();
-    this.setupHud(region);
+    this.setupHud();
+    this.syncRegionHud();
 
-    // Debug hooks for automated smoke testing.
     (window as unknown as { __ccDebug?: unknown }).__ccDebug = {
       battle: (id: string, lvl: number) => this.startWildBattle(id, lvl),
-      trainer: () => this.startTrainerBattle(),
+      trainer: () => this.startTrainerBattleNear(),
+      world: () => ({ w: this.map.width, h: this.map.height, x: this.tileX, y: this.tileY }),
     };
 
     this.events.on(Phaser.Scenes.Events.RESUME, this.onResume, this);
@@ -121,41 +134,54 @@ export class WorldScene extends Phaser.Scene {
     }
   }
 
-  private renderMap() {
-    const biome = getRegion(this.map.regionId).biome;
-    for (let y = 0; y < this.map.height; y++) {
-      for (let x = 0; x < this.map.width; x++) {
+  /** Only draw tiles near the camera — required for a 27k-tile world. */
+  private refreshChunks(force = false) {
+    const cam = this.cameras.main;
+    const left = Math.max(0, Math.floor(cam.worldView.left / TILE) - CHUNK_PAD);
+    const right = Math.min(this.map.width - 1, Math.ceil(cam.worldView.right / TILE) + CHUNK_PAD);
+    const top = Math.max(0, Math.floor(cam.worldView.top / TILE) - CHUNK_PAD);
+    const bottom = Math.min(this.map.height - 1, Math.ceil(cam.worldView.bottom / TILE) + CHUNK_PAD);
+    const key = `${left},${top},${right},${bottom}`;
+    if (!force && key === this.lastChunkKey) return;
+    this.lastChunkKey = key;
+
+    const needed = new Set<string>();
+    for (let y = top; y <= bottom; y++) {
+      for (let x = left; x <= right; x++) {
+        const k = `${x},${y}`;
+        needed.add(k);
+        if (this.tileSprites.has(k)) continue;
+        const biome = biomeAt(this.map, x, y);
         const code = this.map.tiles[y][x];
-        // Draw ground under non-ground special tiles for seamless look.
-        this.add.image(this.px(x), this.py(y), this.tileTexture(code, biome)).setDepth(0);
+        const img = this.add
+          .image(this.px(x), this.py(y), this.tileTexture(code, biome))
+          .setDepth(0);
+        this.tileSprites.set(k, img);
       }
     }
-    // Warp labels (town)
-    this.map.warps.forEach((wp) => {
-      if (wp.label && this.map.regionId === 'town') {
-        const t = label(this, this.px(wp.x), this.py(wp.y) - 16, wp.label, {
-          size: 8,
-          color: '#fff8ef',
-          align: 'center',
-        });
-        t.setOrigin(0.5).setDepth(20);
-        t.setShadow(0, 1, '#5d4e37', 0.5, true, true);
+    // Cull far tiles
+    for (const [k, spr] of this.tileSprites) {
+      if (!needed.has(k)) {
+        spr.destroy();
+        this.tileSprites.delete(k);
       }
-    });
+    }
   }
 
-  private setupBoss(region: ReturnType<typeof getRegion>) {
-    if (!this.map.boss || !region.boss) return;
-    if (Game.getFlag(`boss_${region.boss.id}`)) return;
-    const { x, y } = this.map.boss;
-    const aceId = region.boss.team[region.boss.team.length - 1].speciesId;
-    const c = this.add.container(this.px(x), this.py(y)).setDepth(40);
-    const spr = this.add.image(0, 0, `creature_${aceId}`).setScale(0.55);
-    const mark = label(this, 0, -22, '!', { size: 16, bold: true, color: '#ffd54f' });
-    mark.setOrigin(0.5);
-    c.add([spr, mark]);
-    this.tweens.add({ targets: mark, y: -26, duration: 600, yoyo: true, repeat: -1 });
-    this.bossSprite = c;
+  private setupBosses() {
+    for (const b of this.map.bosses) {
+      const region = getRegion(b.regionId);
+      if (!region.boss) continue;
+      if (Game.getFlag(`boss_${region.boss.id}`)) continue;
+      const aceId = region.boss.team[region.boss.team.length - 1].speciesId;
+      const c = this.add.container(this.px(b.x), this.py(b.y)).setDepth(40);
+      const spr = this.add.image(0, 0, `creature_${aceId}`).setScale(0.5);
+      const mark = label(this, 0, -22, '!', { size: 16, bold: true, color: '#ffd54f' });
+      mark.setOrigin(0.5);
+      c.add([spr, mark]);
+      this.tweens.add({ targets: mark, y: -26, duration: 600, yoyo: true, repeat: -1 });
+      this.bossSprites.set(b.regionId, c);
+    }
   }
 
   private setupInput() {
@@ -167,12 +193,11 @@ export class WorldScene extends Phaser.Scene {
     kb.on('keydown-ENTER', () => this.interact());
     kb.on('keydown-M', () => this.openMenu());
     kb.on('keydown-ESC', () => this.openMenu());
-
     this.joystick = new VirtualJoystick(this, 52, GAME_HEIGHT - 52);
   }
 
-  private setupHud(region: ReturnType<typeof getRegion>) {
-    this.regionLabel = label(this, 8, 6, region.name, { size: 12, bold: true, color: '#fff8ef' });
+  private setupHud() {
+    this.regionLabel = label(this, 8, 6, '', { size: 12, bold: true, color: '#fff8ef' });
     this.regionLabel.setScrollFactor(0).setDepth(1000);
     this.regionLabel.setShadow(0, 2, '#5d4e37', 0.45, true, true);
     this.moneyLabel = label(this, 8, 22, `¢ ${Game.money}`, { size: 10, color: '#fff3c4' });
@@ -200,7 +225,23 @@ export class WorldScene extends Phaser.Scene {
     actBtn.setScrollFactor(0).setDepth(1000);
   }
 
+  private syncRegionHud() {
+    const rid = regionIdAt(this.map, this.tileX, this.tileY);
+    Game.save.player.regionId = rid;
+    this.regionLabel.setText(getRegion(rid).name);
+    const sky: Record<string, string> = {
+      town: '#87ceeb',
+      forest: '#7ec8e8',
+      beach: '#6ec6f0',
+      desert: '#f0d9a0',
+      highlands: '#8ec8f0',
+      cave: '#2a2438',
+    };
+    this.cameras.main.setBackgroundColor(sky[rid] ?? '#87ceeb');
+  }
+
   update(_time: number, delta: number) {
+    this.refreshChunks();
     if (this.interactCooldown > 0) this.interactCooldown -= delta;
     if (this.moving) return;
 
@@ -238,39 +279,30 @@ export class WorldScene extends Phaser.Scene {
     });
   }
 
+  private bossAt(x: number, y: number): string | null {
+    for (const b of this.map.bosses) {
+      if (b.x === x && b.y === y && this.bossSprites.has(b.regionId)) return b.regionId;
+    }
+    return null;
+  }
+
   private canWalk(x: number, y: number): boolean {
     if (!this.isInside(x, y)) return false;
     if (!WALKABLE.has(this.map.tiles[y][x])) return false;
-    if (this.bossSprite && this.map.boss && this.map.boss.x === x && this.map.boss.y === y) {
-      return false;
-    }
+    if (this.bossAt(x, y)) return false;
     return true;
   }
 
   private onEnterTile() {
     Game.save.player.tileX = this.tileX;
     Game.save.player.tileY = this.tileY;
-    const code = this.map.tiles[this.tileY][this.tileX];
-    if (code === T.WARP) {
-      const wp = this.map.warps.find((w) => w.x === this.tileX && w.y === this.tileY);
-      if (wp) this.warpTo(wp.target);
-    } else if (code === T.TALL) {
-      const region = getRegion(this.map.regionId);
-      if (rollEncounter(region.encounterRate)) {
-        const spawn = pickSpawn(region);
-        if (spawn) this.startWildBattle(spawn.speciesId, spawn.level);
-      }
-    }
-  }
+    this.syncRegionHud();
 
-  private warpTo(target: string) {
-    const dest = generateMap(target);
-    Game.save.player.regionId = target;
-    Game.save.player.tileX = dest.spawnX;
-    Game.save.player.tileY = dest.spawnY;
-    Game.persist();
-    this.cameras.main.fadeOut(200);
-    this.cameras.main.once('camerafadeoutcomplete', () => this.scene.restart());
+    const code = this.map.tiles[this.tileY][this.tileX];
+    if (code === T.TALL) {
+      const spawn = rollWorldEncounter(this.map, this.tileX, this.tileY);
+      if (spawn) this.startWildBattle(spawn.speciesId, spawn.level);
+    }
   }
 
   private startWildBattle(speciesId: string, level: number) {
@@ -280,8 +312,13 @@ export class WorldScene extends Phaser.Scene {
     this.launchBattle(data);
   }
 
-  private startTrainerBattle() {
-    const region = getRegion(this.map.regionId);
+  private startTrainerBattleNear() {
+    const rid = regionIdAt(this.map, this.tileX, this.tileY);
+    this.startTrainerBattle(rid);
+  }
+
+  private startTrainerBattle(regionId: string) {
+    const region = getRegion(regionId);
     if (!region.boss) return;
     const team = region.boss.team.map((m) => createInstance(m.speciesId, m.level));
     const data: BattleData = {
@@ -310,9 +347,9 @@ export class WorldScene extends Phaser.Scene {
     const fy = this.tileY + f.dy;
     if (!this.isInside(fx, fy)) return;
 
-    // Boss?
-    if (this.bossSprite && this.map.boss && this.map.boss.x === fx && this.map.boss.y === fy) {
-      this.startTrainerBattle();
+    const bossRegion = this.bossAt(fx, fy);
+    if (bossRegion) {
+      this.startTrainerBattle(bossRegion);
       return;
     }
     const code = this.map.tiles[fy][fx];
@@ -334,22 +371,29 @@ export class WorldScene extends Phaser.Scene {
 
   private onResume() {
     this.moneyLabel.setText(`¢ ${Game.money}`);
-    // Boss defeated during battle -> remove marker.
-    const region = getRegion(this.map.regionId);
-    if (this.bossSprite && region.boss && Game.getFlag(`boss_${region.boss.id}`)) {
-      this.bossSprite.destroy();
-      this.bossSprite = undefined;
+    // Remove defeated bosses
+    for (const [rid, spr] of this.bossSprites) {
+      const region = getRegion(rid);
+      if (region.boss && Game.getFlag(`boss_${region.boss.id}`)) {
+        spr.destroy();
+        this.bossSprites.delete(rid);
+      }
     }
-    // Blackout handling.
     if (!Game.hasUsableCreature()) {
       Game.healParty();
       Game.save.player.regionId = 'town';
-      const townSpawn = generateMap('town');
-      Game.save.player.tileX = townSpawn.spawnX;
-      Game.save.player.tileY = townSpawn.spawnY;
+      Game.save.player.tileX = this.map.spawnX;
+      Game.save.player.tileY = this.map.spawnY;
       Game.persist();
       this.showToast('You blacked out! Rushed back to town.');
-      this.time.delayedCall(600, () => this.scene.restart());
+      this.time.delayedCall(500, () => {
+        this.tileX = this.map.spawnX;
+        this.tileY = this.map.spawnY;
+        this.player.setPosition(this.px(this.tileX), this.py(this.tileY));
+        this.cameras.main.centerOn(this.player.x, this.player.y);
+        this.refreshChunks(true);
+        this.syncRegionHud();
+      });
     } else {
       Game.persist();
     }
@@ -358,12 +402,12 @@ export class WorldScene extends Phaser.Scene {
   private showToast(text: string) {
     this.toast?.destroy();
     const c = this.add.container(GAME_WIDTH / 2, GAME_HEIGHT - 24).setScrollFactor(0).setDepth(2000);
-    const t = label(this, 0, 0, text, { size: 11, align: 'center' });
+    const t = label(this, 0, 0, text, { size: 11, align: 'center', color: '#fff8ef' });
     t.setOrigin(0.5);
     const bg = this.add.graphics();
     const pad = 10;
     const w = t.width + pad * 2;
-    bg.fillStyle(0x11151f, 0.9).fillRoundedRect(-w / 2, -12, w, 24, 6);
+    bg.fillStyle(0x5d4e37, 0.85).fillRoundedRect(-w / 2, -12, w, 24, 6);
     c.add([bg, t]);
     this.toast = c;
     this.time.delayedCall(1800, () => c.destroy());

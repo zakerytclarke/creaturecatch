@@ -22,9 +22,10 @@ class GameState {
 
   newGame(playerName: string, starterId: string): void {
     const starter = createInstance(starterId, 5);
+    // WorldScene will snap onto the plaza if coords are off; 96,72 is world center.
     this.save = {
       version: SAVE_VERSION,
-      player: { name: playerName, regionId: 'town', tileX: 8, tileY: 8, money: 500 },
+      player: { name: playerName, regionId: 'town', tileX: 96, tileY: 72, money: 500 },
       party: [starter],
       box: [],
       bag: STARTING_BAG.map((b) => ({ ...b })),

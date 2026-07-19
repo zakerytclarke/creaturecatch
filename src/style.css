@@ -31,8 +31,10 @@ body {
 
 canvas {
   display: block;
-  image-rendering: auto;
+  /* Keep FIT-scaled canvas from going soft/blurry */
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
   touch-action: none;
-  border-radius: 12px;
+  border-radius: 8px;
   box-shadow: 0 12px 40px rgba(21, 101, 192, 0.28);
 }

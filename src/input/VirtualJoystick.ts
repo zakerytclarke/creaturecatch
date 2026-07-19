@@ -1,7 +1,9 @@
 import Phaser from 'phaser';
 
-// A lightweight on-screen joystick fixed to the camera. Works with touch and mouse.
-// Exposes the current 4-way direction for grid movement.
+/**
+ * On-screen joystick fixed to the camera.
+ * Uses Scale-Manager game coordinates (pointer.x/y) — do NOT re-project via camera.
+ */
 export class VirtualJoystick {
   private base: Phaser.GameObjects.Graphics;
   private thumb: Phaser.GameObjects.Graphics;
@@ -12,11 +14,13 @@ export class VirtualJoystick {
   private pointerId = -1;
   private dx = 0;
   private dy = 0;
+  private gameWidth: number;
 
   constructor(scene: Phaser.Scene, x: number, y: number, radius = 34) {
     this.originX = x;
     this.originY = y;
     this.radius = radius;
+    this.gameWidth = scene.scale.gameSize.width;
 
     this.base = scene.add.graphics().setScrollFactor(0).setDepth(1000);
     this.base.fillStyle(0x000000, 0.28).fillCircle(x, y, radius);
@@ -26,15 +30,15 @@ export class VirtualJoystick {
     this.drawThumb(x, y);
 
     scene.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
-      // Only grab pointers that start on the left half of the screen.
-      if (p.x < scene.scale.width * 0.55 && this.pointerId === -1) {
+      // Left third only — avoid stealing Menu / A / battle UI clicks.
+      if (p.x < this.gameWidth * 0.38 && this.pointerId === -1) {
         this.active = true;
         this.pointerId = p.id;
-        this.updateFromPointer(scene, p);
+        this.updateFromPointer(p);
       }
     });
     scene.input.on('pointermove', (p: Phaser.Input.Pointer) => {
-      if (this.active && p.id === this.pointerId) this.updateFromPointer(scene, p);
+      if (this.active && p.id === this.pointerId) this.updateFromPointer(p);
     });
     const release = (p: Phaser.Input.Pointer) => {
       if (p.id === this.pointerId) {
@@ -49,20 +53,17 @@ export class VirtualJoystick {
     scene.input.on('pointerupoutside', release);
   }
 
-  private updateFromPointer(scene: Phaser.Scene, p: Phaser.Input.Pointer) {
-    // Convert screen pointer to the fixed camera space.
-    const cam = scene.cameras.main;
-    const sx = (p.x - cam.x) / cam.zoom;
-    const sy = (p.y - cam.y) / cam.zoom;
-    let vx = sx - this.originX;
-    let vy = sy - this.originY;
+  private updateFromPointer(p: Phaser.Input.Pointer) {
+    // pointer.x/y are already in game-resolution space under Scale.FIT.
+    let vx = p.x - this.originX;
+    let vy = p.y - this.originY;
     const len = Math.hypot(vx, vy);
     if (len > this.radius) {
       vx = (vx / len) * this.radius;
       vy = (vy / len) * this.radius;
     }
     this.drawThumb(this.originX + vx, this.originY + vy);
-    const dead = 8;
+    const dead = 10;
     if (Math.hypot(vx, vy) < dead) {
       this.dx = 0;
       this.dy = 0;

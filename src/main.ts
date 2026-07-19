@@ -13,18 +13,26 @@ const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
   parent: 'game',
   backgroundColor: '#87ceeb',
+  // Soft art, but lock pixels to the grid so FIT scaling stays sharp.
   pixelArt: false,
-  roundPixels: false,
+  roundPixels: true,
   width: GAME_WIDTH,
   height: GAME_HEIGHT,
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,
   },
-  render: { antialias: true },
+  render: {
+    antialias: false,
+    roundPixels: true,
+    powerPreference: 'high-performance',
+  },
+  input: {
+    activePointers: 3,
+    windowEvents: true,
+  },
   scene: [BootScene, PreloadScene, TitleScene, WorldScene, BattleScene, MenuScene],
 };
 
 const game = new Phaser.Game(config);
-// Expose for automated smoke tests / debugging.
 (window as unknown as { __cc_game: Phaser.Game }).__cc_game = game;
