@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { GAME_WIDTH, GAME_HEIGHT } from '../main';
+import { GAME_WIDTH } from '../main';
 import { Game } from '../state/game';
 import {
   CreatureInstance,
@@ -57,8 +57,8 @@ export class BattleScene extends Phaser.Scene {
   private state: 'intro' | 'menu' | 'message' | 'submenu' | 'over' = 'intro';
 
   // Layout
-  private readonly EHP = { x: 22, y: 48, w: 180 };
-  private readonly PHP = { x: 232, y: 176, w: 180 };
+  private readonly EHP = { x: 22, y: 42, w: 180 };
+  private readonly PHP = { x: 228, y: 172, w: 180 };
 
   constructor() {
     super('Battle');
@@ -94,33 +94,49 @@ export class BattleScene extends Phaser.Scene {
 
   // ---------- Scene drawing ----------
   private drawScene() {
-    this.cameras.main.setBackgroundColor('#33507a');
-    this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x2c4468).setOrigin(0);
-    this.add.rectangle(0, 130, GAME_WIDTH, 90, 0x6fa86a).setOrigin(0);
+    this.cameras.main.setBackgroundColor('#9ad4f5');
+    this.add.image(GAME_WIDTH / 2, 90, 'battle_sky');
+    this.add.image(GAME_WIDTH / 2, 230, 'battle_ground');
 
-    // platforms
-    const g = this.add.graphics();
-    g.fillStyle(0x000000, 0.15);
-    g.fillEllipse(346, 150, 120, 26);
-    g.fillEllipse(96, 214, 140, 30);
+    // Pokémon-Go style soft rings under creatures
+    this.add.image(346, 148, 'battle_ring').setScale(1.05);
+    this.add.image(110, 210, 'battle_ring').setScale(1.15);
 
-    this.enemySprite = this.add.image(346, 108, `creature_${this.enemy.speciesId}`).setScale(1.25);
-    this.playerSprite = this.add.image(96, 176, `creature_${this.player.speciesId}`).setScale(1.6);
+    this.enemySprite = this.add.image(346, 100, `creature_${this.enemy.speciesId}`).setScale(1.05);
+    this.playerSprite = this.add.image(110, 168, `creature_${this.player.speciesId}`).setScale(1.25);
 
-    // Enemy info panel
-    panel(this, 14, 24, 214, 44, { fill: 0x1e2942, radius: 6 });
-    this.enemyName = label(this, 22, 28, '', { size: 12, bold: true });
+    // Soft idle bob (AC life)
+    this.tweens.add({
+      targets: this.enemySprite,
+      y: this.enemySprite.y - 4,
+      duration: 900,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.inOut',
+    });
+    this.tweens.add({
+      targets: this.playerSprite,
+      y: this.playerSprite.y - 3,
+      duration: 1100,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.inOut',
+    });
+
+    // Enemy info panel (cream AC card)
+    panel(this, 14, 18, 214, 48, { fill: 0xfff8ef, stroke: 0xd7c4a8, radius: 14 });
+    this.enemyName = label(this, 22, 24, '', { size: 12, bold: true, color: '#4e3b2a' });
     this.enemyHp = this.add.graphics();
 
     // Player info panel
-    panel(this, 224, 150, 214, 56, { fill: 0x1e2942, radius: 6 });
-    this.playerName = label(this, 232, 154, '', { size: 12, bold: true });
-    this.playerHpText = label(this, 232, 188, '', { size: 10, color: '#b9c4e0' });
+    panel(this, 220, 145, 214, 58, { fill: 0xfff8ef, stroke: 0xd7c4a8, radius: 14 });
+    this.playerName = label(this, 228, 150, '', { size: 12, bold: true, color: '#4e3b2a' });
+    this.playerHpText = label(this, 228, 184, '', { size: 10, color: '#8d6e63' });
     this.playerHp = this.add.graphics();
 
     // Action box
-    panel(this, 8, 210, GAME_WIDTH - 16, 104, { fill: 0x11151f, radius: 8 });
-    this.msgText = label(this, 20, 220, '', { size: 13, wordWrapWidth: GAME_WIDTH - 40 });
+    panel(this, 8, 210, GAME_WIDTH - 16, 104, { fill: 0xfffaf3, stroke: 0xd7c4a8, radius: 16 });
+    this.msgText = label(this, 20, 220, '', { size: 13, color: '#4e3b2a', wordWrapWidth: GAME_WIDTH - 40 });
 
     this.refreshEnemy();
     this.refreshPlayer();

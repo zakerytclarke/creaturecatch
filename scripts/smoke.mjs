@@ -2,6 +2,7 @@
 //   npm run build && npm run preview -- --port 4173 &
 //   npm i -D puppeteer && node scripts/smoke.mjs
 import puppeteer from 'puppeteer';
+import fs from 'fs';
 
 const URL = 'http://localhost:4173/creaturecatch/';
 const errors = [];
@@ -19,24 +20,8 @@ page.on('console', (msg) => {
 page.on('pageerror', (err) => errors.push('PAGEERROR: ' + err.message));
 
 await page.goto(URL, { waitUntil: 'networkidle2', timeout: 30000 });
-
-// Wait for the game canvas and title text to render.
 await page.waitForSelector('canvas', { timeout: 15000 });
-await new Promise((r) => setTimeout(r, 2500));
-
-// Helper: read the active scene keys from the Phaser game on window.
-async function activeScenes() {
-  return page.evaluate(() => {
-    const g = window.__cc_game;
-    if (!g) return null;
-    return g.scene.getScenes(true).map((s) => s.scene.key);
-  });
-}
-
-// Expose the game instance for inspection.
-await page.evaluate(() => {
-  // Phaser stores games on the canvas parent; grab from the global if present.
-});
+await new Promise((r) => setTimeout(r, 3500));
 
 const canvasBox = await page.$eval('canvas', (c) => {
   const r = c.getBoundingClientRect();
@@ -44,76 +29,69 @@ const canvasBox = await page.$eval('canvas', (c) => {
 });
 
 function gameToScreen(gx, gy) {
-  // Game logical size 448x320, FIT-scaled and centered inside the canvas.
   const scale = Math.min(canvasBox.w / 448, canvasBox.h / 320);
   const offX = canvasBox.x + (canvasBox.w - 448 * scale) / 2;
   const offY = canvasBox.y + (canvasBox.h - 320 * scale) / 2;
   return { x: offX + gx * scale, y: offY + gy * scale };
 }
 
-// Click "New Game" (button centered ~ (224, 217))
-let p = gameToScreen(224, 217);
-await page.mouse.click(p.x, p.y);
-await new Promise((r) => setTimeout(r, 800));
+async function clickGame(gx, gy) {
+  const p = gameToScreen(gx, gy);
+  await page.mouse.click(p.x, p.y);
+}
 
-// Pick the first starter ("Pick" button ~ (96, 229))
-p = gameToScreen(96, 229);
-await page.mouse.click(p.x, p.y);
-await new Promise((r) => setTimeout(r, 1500));
+fs.mkdirSync('scripts', { recursive: true });
+await page.screenshot({ path: 'scripts/smoke-title.png' });
 
-await page.screenshot({ path: 'scripts/smoke-world.png' });
+// New Adventure button center ~ (224, 218)
+await clickGame(224, 218);
+await new Promise((r) => setTimeout(r, 1000));
+await page.screenshot({ path: 'scripts/smoke-starter.png' });
 
-// Confirm the World scene is active.
-const scenes = await page.evaluate(() => {
+// Pick first starter button center ~ (96, 223)
+await clickGame(96, 223);
+await new Promise((r) => setTimeout(r, 1800));
+
+let scenes = await page.evaluate(() => {
   const g = window.__cc_game;
   return g ? g.scene.getScenes(true).map((s) => s.scene.key) : null;
 });
-console.log('Active scenes after starter pick:', JSON.stringify(scenes));
+console.log('Scenes after starter:', JSON.stringify(scenes));
+await page.screenshot({ path: 'scripts/smoke-world.png' });
 
-// Trigger a wild battle via the debug hook and exercise the battle scene.
 const started = await page.evaluate(() => {
   const dbg = window.__ccDebug;
-  if (dbg && dbg.battle) {
+  if (dbg?.battle) {
     dbg.battle('mosskit', 4);
     return true;
   }
   return false;
 });
 console.log('Battle triggered:', started);
-await new Promise((r) => setTimeout(r, 1200));
+await new Promise((r) => setTimeout(r, 1400));
 
-// Advance the intro message by clicking a neutral area.
-let n = gameToScreen(224, 120);
-await page.mouse.click(n.x, n.y);
-await new Promise((r) => setTimeout(r, 600));
-
-// Click Fight (grid slot 0, button center ~ (120, 264)).
-let f = gameToScreen(120, 264);
-await page.mouse.click(f.x, f.y);
+await clickGame(224, 120);
 await new Promise((r) => setTimeout(r, 500));
-
-// Click first move (same location).
-await page.mouse.click(f.x, f.y);
-await new Promise((r) => setTimeout(r, 800));
-
-// Advance several battle messages.
+await clickGame(120, 264);
+await new Promise((r) => setTimeout(r, 400));
+await clickGame(120, 264);
+await new Promise((r) => setTimeout(r, 700));
 for (let i = 0; i < 8; i++) {
-  await page.mouse.click(n.x, n.y);
-  await new Promise((r) => setTimeout(r, 350));
+  await clickGame(224, 120);
+  await new Promise((r) => setTimeout(r, 300));
 }
 
 await page.screenshot({ path: 'scripts/smoke-battle.png' });
-
-const battleScenes = await page.evaluate(() => {
+scenes = await page.evaluate(() => {
   const g = window.__cc_game;
   return g ? g.scene.getScenes(true).map((s) => s.scene.key) : null;
 });
-console.log('Active scenes during/after battle:', JSON.stringify(battleScenes));
+console.log('Scenes battle:', JSON.stringify(scenes));
 
 if (errors.length) {
-  console.error('RUNTIME ERRORS DETECTED:\n' + errors.join('\n'));
+  console.error('RUNTIME ERRORS:\n' + errors.join('\n'));
   await browser.close();
   process.exit(1);
 }
-console.log('SMOKE TEST PASSED: no console/page errors.');
+console.log('SMOKE TEST PASSED');
 await browser.close();

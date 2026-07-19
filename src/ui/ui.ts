@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 
-export const FONT = '"Trebuchet MS", "Segoe UI", sans-serif';
+export const FONT = '"Nunito", "Trebuchet MS", "Segoe UI", sans-serif';
 
 export function panel(
   scene: Phaser.Scene,
@@ -11,13 +11,18 @@ export function panel(
   opts: { fill?: number; stroke?: number; alpha?: number; radius?: number } = {},
 ): Phaser.GameObjects.Graphics {
   const g = scene.add.graphics();
-  const fill = opts.fill ?? 0x2b3350;
-  const stroke = opts.stroke ?? 0xffffff;
-  const radius = opts.radius ?? 8;
+  const fill = opts.fill ?? 0xfff8ef;
+  const stroke = opts.stroke ?? 0xd7c4a8;
+  const radius = opts.radius ?? 14;
+  // Soft drop shadow (AC card feel)
+  g.fillStyle(0x5d4e37, 0.18);
+  g.fillRoundedRect(x + 2, y + 3, w, h, radius);
   g.fillStyle(fill, opts.alpha ?? 1);
   g.fillRoundedRect(x, y, w, h, radius);
-  g.lineStyle(2, stroke, 0.9);
+  g.lineStyle(3, stroke, 0.95);
   g.strokeRoundedRect(x, y, w, h, radius);
+  g.lineStyle(1.5, 0xffffff, 0.65);
+  g.strokeRoundedRect(x + 2, y + 2, w - 4, h - 4, radius - 2);
   return g;
 }
 
@@ -31,7 +36,7 @@ export function label(
   return scene.add.text(x, y, text, {
     fontFamily: FONT,
     fontSize: `${opts.size ?? 12}px`,
-    color: opts.color ?? '#ffffff',
+    color: opts.color ?? '#4e3b2a',
     align: opts.align ?? 'left',
     fontStyle: opts.bold ? 'bold' : 'normal',
     wordWrap: opts.wordWrapWidth ? { width: opts.wordWrapWidth } : undefined,
@@ -95,11 +100,12 @@ export class Button extends Phaser.GameObjects.Container {
   }
 
   private draw(hover: boolean) {
-    const base = this.enabled ? this.opts.fill ?? 0x3d64b0 : 0x3a3f52;
-    const fill = hover && this.enabled ? this.opts.hoverFill ?? 0x5081d6 : base;
+    const base = this.enabled ? this.opts.fill ?? 0x6ec6a0 : 0xb0a89c;
+    const fill = hover && this.enabled ? this.opts.hoverFill ?? 0x88d8b4 : base;
     this.bg.clear();
-    this.bg.fillStyle(fill, 1).fillRoundedRect(0, 0, this.opts.w, this.opts.h, 6);
-    this.bg.lineStyle(2, 0xffffff, this.enabled ? 0.85 : 0.3).strokeRoundedRect(0, 0, this.opts.w, this.opts.h, 6);
+    this.bg.fillStyle(0x5d4e37, 0.2).fillRoundedRect(2, 3, this.opts.w, this.opts.h, 12);
+    this.bg.fillStyle(fill, 1).fillRoundedRect(0, 0, this.opts.w, this.opts.h, 12);
+    this.bg.lineStyle(3, 0xffffff, this.enabled ? 0.7 : 0.25).strokeRoundedRect(0, 0, this.opts.w, this.opts.h, 12);
     this.txt.setAlpha(this.enabled ? 1 : 0.5);
   }
 }
@@ -126,6 +132,7 @@ export function redrawHpBar(
   const r = Phaser.Math.Clamp(ratio, 0, 1);
   const color = r > 0.5 ? 0x66bb6a : r > 0.2 ? 0xffca28 : 0xef5350;
   g.clear();
-  g.fillStyle(0x11151f, 1).fillRoundedRect(x, y, w, 7, 3);
-  g.fillStyle(color, 1).fillRoundedRect(x + 1, y + 1, Math.max(0, (w - 2) * r), 5, 2);
+  g.fillStyle(0xd7c4a8, 1).fillRoundedRect(x, y, w, 8, 4);
+  g.fillStyle(0xffffff, 1).fillRoundedRect(x + 1, y + 1, w - 2, 6, 3);
+  g.fillStyle(color, 1).fillRoundedRect(x + 1, y + 1, Math.max(0, (w - 2) * r), 6, 3);
 }

@@ -1,5 +1,5 @@
 :root {
-  --cc-bg: #1c2333;
+  --cc-bg: #8ec8e8;
 }
 
 * {
@@ -11,9 +11,9 @@ body {
   margin: 0;
   padding: 0;
   height: 100%;
-  background: var(--cc-bg);
+  background: radial-gradient(ellipse at top, #b8e0f5 0%, #8ec8e8 55%, #7ec6a8 100%);
   overflow: hidden;
-  font-family: 'Trebuchet MS', 'Segoe UI', system-ui, sans-serif;
+  font-family: 'Nunito', 'Trebuchet MS', 'Segoe UI', system-ui, sans-serif;
   -webkit-tap-highlight-color: transparent;
   -webkit-user-select: none;
   user-select: none;
@@ -31,6 +31,8 @@ body {
 
 canvas {
   display: block;
-  image-rendering: pixelated;
+  image-rendering: auto;
   touch-action: none;
+  border-radius: 12px;
+  box-shadow: 0 12px 40px rgba(45, 60, 50, 0.28);
 }

@@ -42,7 +42,7 @@ export class WorldScene extends Phaser.Scene {
     const regionId = Game.save.player.regionId;
     const region = getRegion(regionId);
     this.map = generateMap(regionId);
-    this.cameras.main.setBackgroundColor(regionId === 'cave' ? '#1a1826' : '#0f1626');
+    this.cameras.main.setBackgroundColor(regionId === 'cave' ? '#2a2438' : '#9ad4f5');
 
     this.renderMap();
 
@@ -127,10 +127,11 @@ export class WorldScene extends Phaser.Scene {
       if (wp.label && this.map.regionId === 'town') {
         const t = label(this, this.px(wp.x), this.py(wp.y) - 16, wp.label, {
           size: 8,
-          color: '#ffe9b0',
+          color: '#fff8ef',
           align: 'center',
         });
         t.setOrigin(0.5).setDepth(20);
+        t.setShadow(0, 1, '#5d4e37', 0.5, true, true);
       }
     });
   }
@@ -163,15 +164,19 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private setupHud(region: ReturnType<typeof getRegion>) {
-    this.regionLabel = label(this, 8, 6, region.name, { size: 12, bold: true });
+    this.regionLabel = label(this, 8, 6, region.name, { size: 12, bold: true, color: '#fff8ef' });
     this.regionLabel.setScrollFactor(0).setDepth(1000);
-    this.moneyLabel = label(this, 8, 22, `¢ ${Game.money}`, { size: 10, color: '#ffe082' });
+    this.regionLabel.setShadow(0, 2, '#5d4e37', 0.45, true, true);
+    this.moneyLabel = label(this, 8, 22, `¢ ${Game.money}`, { size: 10, color: '#fff3c4' });
     this.moneyLabel.setScrollFactor(0).setDepth(1000);
+    this.moneyLabel.setShadow(0, 2, '#5d4e37', 0.45, true, true);
 
     const menuBtn = new Button(this, GAME_WIDTH - 74, 6, 'Menu', {
       w: 66,
       h: 24,
       size: 11,
+      fill: 0xf4a261,
+      hoverFill: 0xf6b57a,
       onClick: () => this.openMenu(),
     });
     menuBtn.setScrollFactor(0).setDepth(1000);
@@ -180,8 +185,8 @@ export class WorldScene extends Phaser.Scene {
       w: 48,
       h: 48,
       size: 18,
-      fill: 0x3a8f5a,
-      hoverFill: 0x4bb072,
+      fill: 0x6ec6a0,
+      hoverFill: 0x88d8b4,
       onClick: () => this.interact(),
     });
     actBtn.setScrollFactor(0).setDepth(1000);

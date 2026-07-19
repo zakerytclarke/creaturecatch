@@ -12,16 +12,16 @@ export const GAME_HEIGHT = 320;
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
   parent: 'game',
-  backgroundColor: '#1c2333',
-  pixelArt: true,
-  roundPixels: true,
+  backgroundColor: '#9ad4f5',
+  pixelArt: false,
+  roundPixels: false,
   width: GAME_WIDTH,
   height: GAME_HEIGHT,
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,
   },
-  render: { antialias: false },
+  render: { antialias: true },
   scene: [BootScene, PreloadScene, TitleScene, WorldScene, BattleScene, MenuScene],
 };
 
