@@ -3,24 +3,6 @@ import { Species } from '../data/creatures';
 import { ElementType } from '../data/types';
 import { hashString } from '../systems/rng';
 
-/** Local copy to avoid circular import with textures.ts */
-const TYPE_PAINT: Record<ElementType, { body: number; accent: number; belly: number }> = {
-  fire: { body: 0xff7043, accent: 0xffca28, belly: 0xffe0b2 },
-  earth: { body: 0xbcaaa4, accent: 0x66bb6a, belly: 0xefebe9 },
-  air: { body: 0x64b5f6, accent: 0xe3f2fd, belly: 0xffffff },
-  water: { body: 0x29b6f6, accent: 0x81d4fa, belly: 0xe1f5fe },
-  darkness: { body: 0x7e57c2, accent: 0xce93d8, belly: 0xede7f6 },
-};
-
-function shade(color: number, amt: number): number {
-  const r = (color >> 16) & 0xff;
-  const g = (color >> 8) & 0xff;
-  const b = color & 0xff;
-  const adj = (c: number) =>
-    amt >= 0 ? Math.round(c + (255 - c) * amt) : Math.round(c * (1 + amt));
-  return (adj(r) << 16) | (adj(g) << 8) | adj(b);
-}
-
 /**
  * Modular creature silhouette system.
  * Archetype from species name → seeded body plan + mix of ears/tails/legs/snouts/extras
@@ -58,6 +40,126 @@ export type Archetype =
   | 'newt'
   | 'imp'
   | 'blob';
+
+/** Type hue anchors — individual creatures wander far from these. */
+const TYPE_HUE: Record<ElementType, number> = {
+  fire: 18,
+  earth: 32,
+  air: 205,
+  water: 198,
+  darkness: 275,
+};
+
+/** Archetype pulls color toward an animal-readable family. */
+const ARCH_HUE_BIAS: Partial<Record<Archetype, number>> = {
+  snake: 130,
+  ghost: 250,
+  spider: 300,
+  crab: 12,
+  cat: 35,
+  dog: 28,
+  lion: 42,
+  fox: 22,
+  bird: 200,
+  bat: 265,
+  frog: 110,
+  turtle: 95,
+  beetle: 55,
+  moth: 310,
+  fish: 185,
+  jelly: 175,
+  otter: 200,
+  seal: 210,
+  penguin: 220,
+  bear: 25,
+  deer: 30,
+  ram: 40,
+  horse: 15,
+  boar: 10,
+  mole: 35,
+  armadillo: 45,
+  dragon: 340,
+  newt: 8,
+  imp: 290,
+  blob: 160,
+};
+
+function clampByte(n: number): number {
+  return Math.max(0, Math.min(255, Math.round(n)));
+}
+
+function hslToRgb(h: number, s: number, l: number): number {
+  const hh = ((h % 360) + 360) % 360;
+  const sat = Math.max(0, Math.min(1, s));
+  const lit = Math.max(0, Math.min(1, l));
+  const c = (1 - Math.abs(2 * lit - 1)) * sat;
+  const x = c * (1 - Math.abs(((hh / 60) % 2) - 1));
+  const m = lit - c / 2;
+  let r = 0;
+  let g = 0;
+  let b = 0;
+  if (hh < 60) [r, g, b] = [c, x, 0];
+  else if (hh < 120) [r, g, b] = [x, c, 0];
+  else if (hh < 180) [r, g, b] = [0, c, x];
+  else if (hh < 240) [r, g, b] = [0, x, c];
+  else if (hh < 300) [r, g, b] = [x, 0, c];
+  else [r, g, b] = [c, 0, x];
+  return (clampByte((r + m) * 255) << 16) | (clampByte((g + m) * 255) << 8) | clampByte((b + m) * 255);
+}
+
+function shade(color: number, amt: number): number {
+  const r = (color >> 16) & 0xff;
+  const g = (color >> 8) & 0xff;
+  const b = color & 0xff;
+  const adj = (c: number) =>
+    amt >= 0 ? Math.round(c + (255 - c) * amt) : Math.round(c * (1 + amt));
+  return (adj(r) << 16) | (adj(g) << 8) | adj(b);
+}
+
+interface CreaturePalette {
+  body: number;
+  accent: number;
+  belly: number;
+  dark: number;
+  pattern: number;
+}
+
+/** Strong per-species color identity: type + archetype bias + seeded wander. */
+function paletteFor(type: ElementType, arch: Archetype, seed: number, stage: number): CreaturePalette {
+  const typeHue = TYPE_HUE[type];
+  const archHue = ARCH_HUE_BIAS[arch] ?? typeHue;
+  const blend = 0.35 + (((seed >>> 2) & 7) / 7) * 0.45;
+  let hue = typeHue * (1 - blend) + archHue * blend;
+  hue += (((seed >>> 8) & 0xff) / 255 - 0.5) * 80; // ±40°
+  hue += stage * (((seed >>> 16) & 7) - 3) * 5;
+
+  let sat =
+    arch === 'ghost' || arch === 'jelly'
+      ? 0.28 + (((seed >>> 4) & 7) / 7) * 0.35
+      : arch === 'penguin' || arch === 'seal'
+        ? 0.22 + (((seed >>> 4) & 7) / 7) * 0.28
+        : arch === 'crab'
+          ? 0.55 + (((seed >>> 4) & 7) / 7) * 0.35
+          : 0.42 + (((seed >>> 4) & 7) / 7) * 0.45;
+
+  let lit =
+    arch === 'ghost'
+      ? 0.64 + (((seed >>> 10) & 7) / 7) * 0.2
+      : arch === 'spider' || type === 'darkness'
+        ? 0.34 + (((seed >>> 10) & 7) / 7) * 0.22
+        : 0.4 + (((seed >>> 10) & 7) / 7) * 0.3;
+
+  if (type === 'fire') lit = Math.min(0.72, lit + 0.06);
+  if (type === 'earth') sat = Math.max(0.28, sat - 0.08);
+
+  const body = hslToRgb(hue, sat, lit);
+  const accentHue = hue + 28 + (((seed >>> 14) & 15) - 7) * 10;
+  const accent = hslToRgb(accentHue, Math.min(1, sat + 0.18), arch === 'bird' || arch === 'moth' ? 0.64 : 0.55);
+  const belly = hslToRgb(hue + 6, sat * 0.32, Math.min(0.93, lit + 0.34));
+  const pattern = hslToRgb(hue + 160 + (((seed >>> 6) & 7) - 3) * 14, Math.min(1, sat + 0.1), lit * 0.65);
+
+  return { body, accent, belly, dark: shade(body, -0.32), pattern };
+}
 
 type EarStyle = 'none' | 'pointy' | 'round' | 'floppy' | 'tuft' | 'horn' | 'antenna' | 'long' | 'swept';
 type TailStyle =
@@ -105,18 +207,20 @@ interface CreatureBuild {
   hasCloak: boolean;
   spots: boolean;
   stripes: boolean;
+  bands: boolean;
   eyeGap: number;
-  /** Seeded 0.85..1.15 stretch on body width */
+  /** Seeded stretch on body width */
   bodyW: number;
-  /** Seeded 0.85..1.15 stretch on body height */
+  /** Seeded stretch on body height */
   bodyH: number;
   /** Head size relative to default */
   headScale: number;
-  /** Horizontal lean for coils / aquatic (−0.2..0.2) */
+  /** Horizontal lean for coils / aquatic */
   lean: number;
   multiEyes: boolean;
   fang: boolean;
   whiskers: boolean;
+  stalkEyes: boolean;
 }
 
 function ovalShadow(g: Phaser.GameObjects.Graphics, x: number, y: number, w: number, h: number, a = 0.28) {
@@ -188,6 +292,7 @@ function buildFromArchetype(arch: Archetype, seed: number): CreatureBuild {
     hasCloak: false,
     spots: bit(3),
     stripes: bit(5),
+    bands: false,
     eyeGap: 0.32 + ((seed >>> 8) & 7) * 0.015,
     bodyW: stretch(4),
     bodyH: stretch(7),
@@ -196,6 +301,7 @@ function buildFromArchetype(arch: Archetype, seed: number): CreatureBuild {
     multiEyes: false,
     fang: false,
     whiskers: false,
+    stalkEyes: false,
   };
 
   switch (arch) {
@@ -206,13 +312,15 @@ function buildFromArchetype(arch: Archetype, seed: number): CreatureBuild {
         ear: 'none',
         tail: pickFrom(seed, 2, ['none', 'rattle', 'stinger', 'segment']),
         legs: 'none',
-        snout: pickFrom(seed, 4, ['none', 'flat', 'long']),
-        eyeGap: 0.38,
-        bodyW: 1.05 + (((seed >>> 4) & 3) * 0.08),
-        bodyH: 0.9,
+        snout: pickFrom(seed, 4, ['flat', 'long', 'none']),
+        eyeGap: 0.4,
+        bodyW: 1.15 + (((seed >>> 4) & 3) * 0.1),
+        bodyH: 1.05,
+        headScale: 0.85,
         lean,
-        stripes: bit(1) || bit(5),
-        fang: bit(6),
+        bands: true,
+        stripes: false,
+        fang: true,
       };
     case 'ghost':
       return {
@@ -222,9 +330,10 @@ function buildFromArchetype(arch: Archetype, seed: number): CreatureBuild {
         tail: 'ghost',
         legs: 'none',
         hasCloak: true,
-        eyeGap: 0.4,
-        bodyW: stretch(2),
-        bodyH: 1.05 + (((seed >>> 6) & 3) * 0.08),
+        eyeGap: 0.42,
+        bodyW: 0.95 + stretch(2) * 0.15,
+        bodyH: 1.25 + (((seed >>> 6) & 3) * 0.1),
+        headScale: 1.15,
         fang: bit(3),
       };
     case 'spider':
@@ -234,10 +343,13 @@ function buildFromArchetype(arch: Archetype, seed: number): CreatureBuild {
         ear: 'none',
         tail: pickFrom(seed, 2, ['stinger', 'none', 'segment']),
         legs: 'spider',
-        eyeGap: 0.26,
+        eyeGap: 0.24,
         multiEyes: true,
-        bodyW: stretch(3),
+        bodyW: 1.05 + stretch(3) * 0.2,
+        bodyH: 0.9,
+        headScale: 0.7,
         fang: true,
+        spots: bit(2),
       };
     case 'crab':
       return {
@@ -247,10 +359,12 @@ function buildFromArchetype(arch: Archetype, seed: number): CreatureBuild {
         tail: 'none',
         legs: 'crab',
         hasShell: true,
-        eyeGap: 0.42,
-        bodyW: 1.15 + (((seed >>> 4) & 3) * 0.06),
-        bodyH: 0.85,
-        snout: 'none',
+        eyeGap: 0.5,
+        bodyW: 1.45 + (((seed >>> 4) & 3) * 0.1),
+        bodyH: 0.7,
+        headScale: 0.55,
+        stalkEyes: true,
+        spots: bit(4),
       };
     case 'cat':
       return {
@@ -316,9 +430,10 @@ function buildFromArchetype(arch: Archetype, seed: number): CreatureBuild {
         legs: 'bird',
         snout: 'beak',
         hasWings: true,
-        bodyW: 0.85,
-        bodyH: 1.15,
-        headScale: 0.9,
+        bodyW: 0.7,
+        bodyH: 1.2,
+        headScale: 0.85,
+        spots: bit(3),
       };
     case 'bat':
       return {
@@ -862,24 +977,31 @@ function drawWings(
   bat: boolean,
 ) {
   if (moth) {
-    g.fillStyle(accent, 0.55);
-    g.fillEllipse(cx - R * 1.05, cy - R * 0.15, R * 0.95, R * 0.55);
-    g.fillEllipse(cx + R * 1.05, cy - R * 0.15, R * 0.95, R * 0.55);
+    g.fillStyle(accent, 0.6);
+    g.fillEllipse(cx - R * 1.25, cy - R * 0.1, R * 1.15, R * 0.7);
+    g.fillEllipse(cx + R * 1.25, cy - R * 0.1, R * 1.15, R * 0.7);
+    g.fillEllipse(cx - R * 1.05, cy + R * 0.35, R * 0.7, R * 0.45);
+    g.fillEllipse(cx + R * 1.05, cy + R * 0.35, R * 0.7, R * 0.45);
     g.fillStyle(0xffffff, 0.35);
-    g.fillEllipse(cx - R * 1.05, cy - R * 0.25, R * 0.4, R * 0.22);
-    g.fillEllipse(cx + R * 1.05, cy - R * 0.25, R * 0.4, R * 0.22);
+    g.fillEllipse(cx - R * 1.2, cy - R * 0.2, R * 0.4, R * 0.25);
+    g.fillEllipse(cx + R * 1.2, cy - R * 0.2, R * 0.4, R * 0.25);
   } else if (bat) {
-    g.fillStyle(accent, 0.85);
-    g.fillTriangle(cx - R * 0.3, cy, cx - R * 1.55, cy - R * 0.35, cx - R * 0.9, cy + R * 0.65);
-    g.fillTriangle(cx + R * 0.3, cy, cx + R * 1.55, cy - R * 0.35, cx + R * 0.9, cy + R * 0.65);
-    g.fillStyle(shade(accent, -0.2), 0.5);
-    g.fillTriangle(cx - R * 0.4, cy + R * 0.05, cx - R * 1.1, cy + R * 0.05, cx - R * 0.75, cy + R * 0.45);
-  } else {
     g.fillStyle(accent, 0.9);
-    g.fillTriangle(cx - R * 0.35, cy, cx - R * 1.45, cy - R * 0.85, cx - R * 1.05, cy + R * 0.45);
-    g.fillTriangle(cx + R * 0.35, cy, cx + R * 1.45, cy - R * 0.85, cx + R * 1.05, cy + R * 0.45);
-    g.fillStyle(0xffffff, 0.28);
-    g.fillTriangle(cx - R * 0.45, cy - R * 0.05, cx - R * 1.15, cy - R * 0.5, cx - R * 0.85, cy + R * 0.15);
+    g.fillTriangle(cx - R * 0.25, cy, cx - R * 1.75, cy - R * 0.45, cx - R * 1.0, cy + R * 0.75);
+    g.fillTriangle(cx + R * 0.25, cy, cx + R * 1.75, cy - R * 0.45, cx + R * 1.0, cy + R * 0.75);
+    g.fillStyle(shade(accent, -0.2), 0.55);
+    g.fillTriangle(cx - R * 0.35, cy + R * 0.05, cx - R * 1.2, cy + R * 0.1, cx - R * 0.8, cy + R * 0.5);
+    g.fillTriangle(cx + R * 0.35, cy + R * 0.05, cx + R * 1.2, cy + R * 0.1, cx + R * 0.8, cy + R * 0.5);
+  } else {
+    // Bird — big readable wing span
+    g.fillStyle(accent, 0.95);
+    g.fillEllipse(cx - R * 1.35, cy - R * 0.05, R * 1.35, R * 0.55);
+    g.fillEllipse(cx + R * 1.35, cy - R * 0.05, R * 1.35, R * 0.55);
+    g.fillTriangle(cx - R * 0.4, cy, cx - R * 1.85, cy - R * 0.55, cx - R * 1.2, cy + R * 0.35);
+    g.fillTriangle(cx + R * 0.4, cy, cx + R * 1.85, cy - R * 0.55, cx + R * 1.2, cy + R * 0.35);
+    g.fillStyle(0xffffff, 0.3);
+    g.fillEllipse(cx - R * 1.2, cy - R * 0.15, R * 0.45, R * 0.22);
+    g.fillEllipse(cx + R * 1.2, cy - R * 0.15, R * 0.45, R * 0.22);
   }
 }
 
@@ -952,19 +1074,28 @@ function drawPatterns(
   R: number,
   accent: number,
   dark: number,
+  pattern: number,
 ) {
+  if (build.bands) {
+    g.fillStyle(pattern, 0.55);
+    for (let i = 0; i < 5; i++) {
+      const y = bodyY - R * 0.55 + i * R * 0.28;
+      g.fillEllipse(cx + (i % 2 === 0 ? -R * 0.1 : R * 0.15), y, R * (1.1 - i * 0.08) * build.bodyW, R * 0.16);
+    }
+  }
   if (build.spots) {
-    g.fillStyle(dark, 0.35);
-    g.fillCircle(cx - R * 0.25, bodyY - R * 0.05, R * 0.12);
-    g.fillCircle(cx + R * 0.3, bodyY + R * 0.15, R * 0.1);
-    g.fillCircle(cx, bodyY + R * 0.05, R * 0.08);
-    g.fillCircle(cx + R * 0.15, bodyY - R * 0.2, R * 0.07);
+    g.fillStyle(pattern, 0.5);
+    g.fillCircle(cx - R * 0.25, bodyY - R * 0.05, R * 0.14);
+    g.fillCircle(cx + R * 0.3, bodyY + R * 0.15, R * 0.12);
+    g.fillCircle(cx, bodyY + R * 0.05, R * 0.09);
+    g.fillCircle(cx + R * 0.15, bodyY - R * 0.2, R * 0.08);
+    g.fillCircle(cx - R * 0.4, bodyY + R * 0.25, R * 0.07);
   }
   if (build.stripes) {
-    g.lineStyle(Math.max(1.5, R * 0.08), dark, 0.4);
-    for (let i = 0; i < 3; i++) {
-      const ox = (i - 1) * headR * 0.28;
-      g.lineBetween(cx + ox - headR * 0.15, headY - headR * 0.25, cx + ox + headR * 0.1, headY + headR * 0.4);
+    g.lineStyle(Math.max(2, R * 0.1), pattern, 0.55);
+    for (let i = 0; i < 4; i++) {
+      const ox = (i - 1.5) * headR * 0.26;
+      g.lineBetween(cx + ox - headR * 0.12, headY - headR * 0.3, cx + ox + headR * 0.12, headY + headR * 0.45);
     }
   }
   if (build.hasMane) {
@@ -981,11 +1112,10 @@ function drawPatterns(
     g.fillEllipse(cx - R * 0.2, bodyY - R * 0.25, R * 0.45, R * 0.3);
     g.lineStyle(Math.max(1.5, R * 0.06), dark, 0.4);
     g.strokeEllipse(cx, bodyY - R * 0.05, R * 1.15 * build.bodyW, R * 0.85 * build.bodyH);
-    // Shell segments for beetles / armadillos
-    if (build.archetype === 'beetle' || build.archetype === 'armadillo') {
-      g.lineStyle(Math.max(1, R * 0.05), dark, 0.35);
+    if (build.archetype === 'beetle' || build.archetype === 'armadillo' || build.archetype === 'crab') {
+      g.lineStyle(Math.max(1, R * 0.05), dark, 0.4);
       g.lineBetween(cx, bodyY - R * 0.45, cx, bodyY + R * 0.35);
-      g.lineBetween(cx - R * 0.4, bodyY - R * 0.2, cx + R * 0.4, bodyY - R * 0.2);
+      g.lineBetween(cx - R * 0.45, bodyY - R * 0.15, cx + R * 0.45, bodyY - R * 0.15);
     }
   }
 }
@@ -1010,150 +1140,180 @@ function drawBodyPlan(
 
   switch (build.plan) {
     case 'coil': {
-      bodyY = cy + R * 0.35;
-      headY = cy - R * 0.2;
-      headR = R * 0.72 * build.headScale;
-      hx = cx - R * 0.4 + leanX;
+      // Raised hooded head + stacked S-coils — unmistakably a snake
+      bodyY = cy + R * 0.45;
+      headY = cy - R * 0.55;
+      headR = R * 0.7 * build.headScale;
+      hx = cx - R * 0.15 + leanX;
       g.fillStyle(body, 1);
-      g.fillEllipse(cx + R * 0.4 + leanX * 0.5, bodyY + R * 0.4, R * 1.55 * bw, R * 0.5 * bh);
-      g.fillEllipse(cx + leanX * 0.3, bodyY + R * 0.05, R * 1.25 * bw, R * 0.48 * bh);
-      g.fillEllipse(cx - R * 0.25 + leanX, bodyY - R * 0.25, R * 0.9, R * 0.42);
-      sphere(g, hx, headY + R * 0.1, R * 0.55, body);
-      g.fillStyle(belly, 1).fillEllipse(cx + R * 0.05, bodyY + R * 0.15, R * 0.75 * bw, R * 0.28);
+      g.fillEllipse(cx + R * 0.55 + leanX * 0.4, bodyY + R * 0.45, R * 1.7 * bw, R * 0.48);
+      g.fillEllipse(cx - R * 0.15 + leanX * 0.2, bodyY + R * 0.05, R * 1.45 * bw, R * 0.5);
+      g.fillEllipse(cx + R * 0.25 + leanX, bodyY - R * 0.35, R * 1.15 * bw, R * 0.42);
+      // Rising neck
+      g.fillEllipse(hx + R * 0.05, cy - R * 0.05, R * 0.48, R * 0.85);
+      sphere(g, hx, headY, headR, body);
+      g.fillStyle(belly, 1);
+      g.fillEllipse(cx + R * 0.1, bodyY + R * 0.1, R * 0.7 * bw, R * 0.22);
+      g.fillEllipse(hx, headY + headR * 0.25, headR * 0.7, headR * 0.45);
+      // Forked tongue cue
+      g.fillStyle(accent, 1);
+      g.fillTriangle(hx - headR * 0.05, headY + headR * 0.55, hx - headR * 0.35, headY + headR * 0.95, hx + headR * 0.05, headY + headR * 0.7);
+      g.fillTriangle(hx + headR * 0.05, headY + headR * 0.55, hx + headR * 0.35, headY + headR * 0.95, hx - headR * 0.05, headY + headR * 0.7);
       break;
     }
     case 'wraith': {
-      bodyY = cy + R * 0.45;
-      headY = cy - R * 0.15;
-      headR = R * 1.05 * build.headScale;
-      sphere(g, cx, headY + R * 0.2, headR * bw, body);
-      g.fillStyle(body, 0.85);
-      const tips = 4 + ((build.archetype === 'jelly' ? 1 : 0) + (build.bodyW > 1.05 ? 1 : 0));
+      // Tall floating teardrop + ragged hem — ghost / jelly
+      bodyY = cy + R * 0.55;
+      headY = cy - R * 0.35;
+      headR = R * 1.15 * build.headScale;
+      hx = cx;
+      g.fillStyle(body, build.archetype === 'ghost' ? 0.82 : 0.95);
+      g.fillEllipse(cx, cy + R * 0.05, R * 1.15 * bw, R * 1.55 * bh);
+      sphere(g, cx, headY + R * 0.15, headR * 0.95, body);
+      g.fillStyle(body, 0.75);
+      const tips = build.archetype === 'jelly' ? 6 : 5;
       for (let i = 0; i < tips; i++) {
-        const tw = R * (0.28 + (i % 2) * 0.06);
-        g.fillEllipse(cx - R * 0.7 * bw + i * ((R * 1.4 * bw) / (tips - 1)), bodyY + R * 0.5 * bh, tw, R * 0.5 * bh);
+        const tw = R * (0.32 + (i % 2) * 0.1);
+        const th = R * (0.65 + (i % 3) * 0.12) * bh;
+        g.fillEllipse(cx - R * 0.85 * bw + i * ((R * 1.7 * bw) / Math.max(1, tips - 1)), bodyY + R * 0.35, tw, th);
       }
       if (build.archetype === 'jelly') {
-        g.fillStyle(accent, 0.45);
-        g.fillEllipse(cx, headY + R * 0.05, headR * 1.25, headR * 0.65);
+        g.fillStyle(accent, 0.5);
+        g.fillEllipse(cx, headY + R * 0.05, headR * 1.35, headR * 0.7);
+        g.lineStyle(Math.max(2, R * 0.08), accent, 0.55);
+        for (let i = 0; i < 4; i++) {
+          const x = cx - R * 0.45 + i * R * 0.3;
+          g.lineBetween(x, bodyY - R * 0.1, x + (i % 2 ? 4 : -4), bodyY + R * 0.85);
+        }
+      } else {
+        // Soft halo for ghosts
+        g.fillStyle(accent, 0.2);
+        g.fillCircle(cx, headY, headR * 1.35);
       }
       break;
     }
     case 'arachnid': {
-      bodyY = cy + R * 0.35;
-      headY = cy - R * 0.15;
-      headR = R * 0.55 * build.headScale;
-      sphere(g, cx + leanX * 0.3, bodyY + R * 0.2, R * 0.8 * bw, body); // abdomen
-      sphere(g, cx - leanX * 0.2, headY + R * 0.3, R * 0.55 * bw, body); // cephalothorax
-      g.fillStyle(belly, 0.7).fillEllipse(cx, bodyY + R * 0.35, R * 0.45, R * 0.3);
+      // Big rear abdomen + small front — tarantula read
+      bodyY = cy + R * 0.4;
+      headY = cy - R * 0.05;
+      headR = R * 0.5 * build.headScale;
+      hx = cx - R * 0.35;
+      sphere(g, cx + R * 0.35, bodyY + R * 0.15, R * 0.95 * bw, body);
+      sphere(g, hx, headY + R * 0.15, R * 0.58 * bw, body);
+      g.fillStyle(belly, 0.75).fillEllipse(cx + R * 0.35, bodyY + R * 0.35, R * 0.55, R * 0.35);
       break;
     }
     case 'crustacean': {
-      bodyY = cy + R * 0.35;
-      headY = cy - R * 0.05;
-      headR = R * 0.65 * build.headScale;
-      g.fillStyle(body, 1).fillEllipse(cx, bodyY, R * 1.35 * bw, R * 0.8 * bh);
-      g.fillStyle(belly, 1).fillEllipse(cx, bodyY + R * 0.18, R * 0.85 * bw, R * 0.42);
-      sphere(g, cx, headY + R * 0.25, headR, body);
+      // Wide flat carapace — crab
+      bodyY = cy + R * 0.4;
+      headY = cy - R * 0.15;
+      headR = R * 0.45 * build.headScale;
+      hx = cx;
+      g.fillStyle(body, 1).fillEllipse(cx, bodyY, R * 1.65 * bw, R * 0.75 * bh);
+      g.fillStyle(belly, 1).fillEllipse(cx, bodyY + R * 0.15, R * 1.05 * bw, R * 0.4);
+      // Tiny head nub (eyes drawn on stalks later)
+      sphere(g, cx, headY + R * 0.35, headR, body);
       break;
     }
     case 'amphibian': {
-      bodyY = cy + R * 0.35;
-      headY = cy - R * 0.25;
-      headR = R * 0.95 * build.headScale;
-      sphere(g, cx, bodyY, R * 0.95 * bw, body);
-      g.fillStyle(belly, 1).fillEllipse(cx, bodyY + R * 0.25, R * 0.95 * bw, R * 0.6 * bh);
-      sphere(g, cx - headR * 0.55, headY - headR * 0.1, headR * 0.42, body);
-      sphere(g, cx + headR * 0.55, headY - headR * 0.1, headR * 0.42, body);
+      bodyY = cy + R * 0.4;
+      headY = cy - R * 0.2;
+      headR = R * 1.0 * build.headScale;
+      sphere(g, cx, bodyY, R * 1.05 * bw, body);
+      g.fillStyle(belly, 1).fillEllipse(cx, bodyY + R * 0.3, R * 1.0 * bw, R * 0.65 * bh);
+      sphere(g, cx - headR * 0.6, headY - headR * 0.05, headR * 0.48, body);
+      sphere(g, cx + headR * 0.6, headY - headR * 0.05, headR * 0.48, body);
       break;
     }
     case 'aquatic': {
+      // Long horizontal fish / ray
       bodyY = cy + R * 0.15;
-      headY = cy - R * 0.05;
-      headR = R * 0.7 * build.headScale;
-      hx = cx - R * 0.55 + leanX;
-      g.fillStyle(body, 1).fillEllipse(cx + leanX * 0.3, cy + R * 0.1, R * 1.45 * bw, R * 0.85 * bh);
-      g.fillStyle(belly, 1).fillEllipse(cx + leanX * 0.3, cy + R * 0.28, R * 0.95 * bw, R * 0.48);
-      sphere(g, hx, headY + R * 0.15, headR, body);
+      headY = cy;
+      headR = R * 0.65 * build.headScale;
+      hx = cx - R * 0.7 + leanX;
+      g.fillStyle(body, 1).fillEllipse(cx + leanX * 0.2, cy + R * 0.08, R * 1.7 * bw, R * 0.8 * bh);
+      g.fillStyle(belly, 1).fillEllipse(cx + leanX * 0.2, cy + R * 0.25, R * 1.1 * bw, R * 0.42);
+      // Dorsal fin
+      g.fillStyle(accent, 1);
+      g.fillTriangle(cx - R * 0.1, cy - R * 0.35, cx + R * 0.35, cy - R * 0.95, cx + R * 0.45, cy - R * 0.25);
+      sphere(g, hx, headY, headR, body);
       break;
     }
     case 'avian': {
-      bodyY = cy + R * 0.45;
-      headY = cy - R * 0.45;
-      headR = R * 0.85 * build.headScale;
-      g.fillStyle(body, 1).fillEllipse(cx, bodyY, R * 0.85 * bw, R * 1.05 * bh);
-      g.fillStyle(belly, 1).fillEllipse(cx, bodyY + R * 0.15, R * 0.55 * bw, R * 0.7);
+      // Compact oval + perched head — wings drawn separately dominate silhouette
+      bodyY = cy + R * 0.5;
+      headY = cy - R * 0.5;
+      headR = R * 0.8 * build.headScale;
+      g.fillStyle(body, 1).fillEllipse(cx, bodyY, R * 0.75 * bw, R * 1.15 * bh);
+      g.fillStyle(belly, 1).fillEllipse(cx, bodyY + R * 0.1, R * 0.48 * bw, R * 0.75);
       sphere(g, cx, headY, headR, body);
       break;
     }
     case 'shelled': {
-      bodyY = cy + R * 0.4;
-      headY = cy - R * 0.25;
-      headR = R * 0.75 * build.headScale;
-      sphere(g, cx, bodyY, R * 0.75 * bw, body);
-      g.fillStyle(belly, 1).fillEllipse(cx, bodyY + R * 0.2, R * 0.7, R * 0.4);
-      // Head peeks out slightly forward
-      hx = cx - R * 0.15;
+      bodyY = cy + R * 0.45;
+      headY = cy - R * 0.2;
+      headR = R * 0.7 * build.headScale;
+      sphere(g, cx, bodyY, R * 0.7 * bw, body);
+      g.fillStyle(belly, 1).fillEllipse(cx, bodyY + R * 0.22, R * 0.65, R * 0.38);
+      hx = cx - R * 0.35;
       sphere(g, hx, headY, headR, body);
       break;
     }
     case 'sleek': {
-      // Cats / foxes / otters / newts — elongated horizontal body
-      bodyY = cy + R * 0.45;
-      headY = cy - R * 0.2;
+      bodyY = cy + R * 0.5;
+      headY = cy - R * 0.15;
       headR = R * 0.88 * build.headScale;
-      hx = cx - R * 0.15;
-      g.fillStyle(body, 1).fillEllipse(cx, bodyY, R * 1.15 * bw, R * 0.65 * bh);
-      g.fillStyle(belly, 1).fillEllipse(cx, bodyY + R * 0.12, R * 0.85 * bw, R * 0.4);
+      hx = cx - R * 0.25;
+      g.fillStyle(body, 1).fillEllipse(cx + R * 0.1, bodyY, R * 1.35 * bw, R * 0.6 * bh);
+      g.fillStyle(belly, 1).fillEllipse(cx + R * 0.1, bodyY + R * 0.12, R * 0.95 * bw, R * 0.35);
       sphere(g, hx, headY, headR, body);
       break;
     }
     case 'stocky': {
-      bodyY = cy + R * 0.4;
-      headY = cy - R * 0.3;
-      headR = R * 1.0 * build.headScale;
-      sphere(g, cx, bodyY, R * 0.85 * bw, body);
-      g.fillStyle(belly, 1).fillEllipse(cx, bodyY + R * 0.2, R * 0.85 * bw, R * 0.55 * bh);
+      bodyY = cy + R * 0.42;
+      headY = cy - R * 0.28;
+      headR = R * 1.05 * build.headScale;
+      sphere(g, cx, bodyY, R * 0.9 * bw, body);
+      g.fillStyle(belly, 1).fillEllipse(cx, bodyY + R * 0.22, R * 0.9 * bw, R * 0.55 * bh);
       sphere(g, cx, headY, headR, body);
       break;
     }
     case 'maneBeast': {
-      bodyY = cy + R * 0.45;
-      headY = cy - R * 0.25;
-      headR = R * 1.08 * build.headScale;
-      g.fillStyle(body, 1).fillEllipse(cx, bodyY, R * 1.05 * bw, R * 0.8 * bh);
-      g.fillStyle(belly, 1).fillEllipse(cx, bodyY + R * 0.18, R * 0.75, R * 0.5);
+      bodyY = cy + R * 0.48;
+      headY = cy - R * 0.22;
+      headR = R * 1.12 * build.headScale;
+      g.fillStyle(body, 1).fillEllipse(cx, bodyY, R * 1.15 * bw, R * 0.85 * bh);
+      g.fillStyle(belly, 1).fillEllipse(cx, bodyY + R * 0.2, R * 0.8, R * 0.5);
       sphere(g, cx, headY, headR, body);
       break;
     }
     case 'lanky': {
-      bodyY = cy + R * 0.5;
-      headY = cy - R * 0.5;
-      headR = R * 0.82 * build.headScale;
-      hx = cx - R * 0.1;
-      g.fillStyle(body, 1).fillEllipse(cx, bodyY - R * 0.1, R * 0.75 * bw, R * 0.95 * bh);
-      g.fillStyle(belly, 1).fillEllipse(cx, bodyY, R * 0.5, R * 0.55);
+      bodyY = cy + R * 0.55;
+      headY = cy - R * 0.55;
+      headR = R * 0.8 * build.headScale;
+      hx = cx - R * 0.15;
+      g.fillStyle(body, 1).fillEllipse(cx, bodyY - R * 0.15, R * 0.7 * bw, R * 1.1 * bh);
+      g.fillStyle(belly, 1).fillEllipse(cx, bodyY, R * 0.45, R * 0.6);
       sphere(g, hx, headY, headR, body);
       break;
     }
     case 'drake': {
-      bodyY = cy + R * 0.4;
-      headY = cy - R * 0.45;
-      headR = R * 0.85 * build.headScale;
-      hx = cx - R * 0.2;
-      g.fillStyle(body, 1).fillEllipse(cx, bodyY, R * 1.05 * bw, R * 0.7 * bh);
-      g.fillStyle(belly, 1).fillEllipse(cx, bodyY + R * 0.15, R * 0.7, R * 0.4);
-      // Neck
-      g.fillStyle(body, 1).fillEllipse(cx - R * 0.15, cy - R * 0.05, R * 0.4, R * 0.55);
+      bodyY = cy + R * 0.42;
+      headY = cy - R * 0.55;
+      headR = R * 0.82 * build.headScale;
+      hx = cx - R * 0.35;
+      g.fillStyle(body, 1).fillEllipse(cx + R * 0.15, bodyY, R * 1.15 * bw, R * 0.7 * bh);
+      g.fillStyle(belly, 1).fillEllipse(cx + R * 0.1, bodyY + R * 0.15, R * 0.75, R * 0.4);
+      g.fillStyle(body, 1).fillEllipse(cx - R * 0.2, cy - R * 0.05, R * 0.42, R * 0.7);
       sphere(g, hx, headY, headR, body);
       break;
     }
     case 'wingedFurry': {
-      bodyY = cy + R * 0.35;
-      headY = cy - R * 0.25;
-      headR = R * 0.9 * build.headScale;
-      sphere(g, cx, bodyY, R * 0.65 * bw, body);
-      g.fillStyle(belly, 1).fillEllipse(cx, bodyY + R * 0.15, R * 0.55, R * 0.4);
+      bodyY = cy + R * 0.4;
+      headY = cy - R * 0.2;
+      headR = R * 0.95 * build.headScale;
+      sphere(g, cx, bodyY, R * 0.6 * bw, body);
+      g.fillStyle(belly, 1).fillEllipse(cx, bodyY + R * 0.15, R * 0.5, R * 0.38);
       sphere(g, cx, headY, headR, body);
       break;
     }
@@ -1172,20 +1332,15 @@ function drawBodyPlan(
 }
 
 /**
- * Main entry — cute BDSP chibi vibe with distinct modular silhouettes.
+ * Main entry — cute BDSP chibi vibe with distinct modular silhouettes + unique colors.
  */
 export function drawCreatureModular(g: Phaser.GameObjects.Graphics, species: Species, size: number) {
   const type = species.types[0] as ElementType;
-  const paint = TYPE_PAINT[type];
   const seed = hashString(species.id);
-  const hueJitter = (((seed >> 5) & 0xff) / 255 - 0.5) * 0.12;
-  const body = shade(paint.body, hueJitter);
-  const accent = paint.accent;
-  const belly = paint.belly;
-  const dark = shade(body, -0.28);
-
   const arch = pickArchetype(species.name, seed);
   const build = buildFromArchetype(arch, seed);
+  const paint = paletteFor(type, arch, seed, species.stage);
+  const { body, accent, belly, dark, pattern } = paint;
   const stageScale = 1 + species.stage * 0.1;
 
   const cx = size / 2;
@@ -1193,21 +1348,25 @@ export function drawCreatureModular(g: Phaser.GameObjects.Graphics, species: Spe
   const R = size * 0.19 * stageScale;
 
   const shadowW =
-    build.legs === 'spider' || build.legs === 'crab' ? 2.9 : build.plan === 'sleek' || build.plan === 'coil' ? 2.6 : 2.3;
-  ovalShadow(g, cx, size * 0.9, R * shadowW * build.bodyW, R * 0.55, 0.3);
+    build.legs === 'spider' || build.legs === 'crab'
+      ? 3.2
+      : build.plan === 'sleek' || build.plan === 'coil' || build.hasWings
+        ? 2.8
+        : 2.3;
+  ovalShadow(g, cx, size * 0.92, R * shadowW * Math.max(1, build.bodyW), R * 0.5, 0.28);
 
-  if (type === 'fire' && build.tail !== 'flame') {
+  if (type === 'fire' && build.tail !== 'flame' && arch !== 'snake') {
     g.fillStyle(accent, 0.85);
     g.fillTriangle(cx, cy - R * 1.55, cx - R * 0.35, cy - R * 0.8, cx + R * 0.35, cy - R * 0.8);
   }
-  if (type === 'darkness' && !build.hasCloak) {
+  if (type === 'darkness' && !build.hasCloak && arch !== 'ghost') {
     g.fillStyle(dark, 0.7);
     g.fillTriangle(cx - R * 0.45, cy - R * 0.9, cx - R * 0.2, cy - R * 1.4, cx - R * 0.05, cy - R * 0.9);
     g.fillTriangle(cx + R * 0.45, cy - R * 0.9, cx + R * 0.2, cy - R * 1.4, cx + R * 0.05, cy - R * 0.9);
   }
 
   if (build.hasWings) {
-    drawWings(g, cx, cy, R, accent, arch === 'moth', arch === 'bat');
+    drawWings(g, cx, cy - R * 0.1, R, accent, arch === 'moth', arch === 'bat');
   }
 
   const { bodyY, headY, headR, hx } = drawBodyPlan(g, build, cx, cy, R, body, belly, accent);
@@ -1215,7 +1374,6 @@ export function drawCreatureModular(g: Phaser.GameObjects.Graphics, species: Spe
   drawLegs(g, build.legs, cx, bodyY, R, dark, accent, build.bodyH);
   drawTail(g, build.tail, cx, bodyY, R, body, accent, dark);
 
-  // Mane behind face for lions (drawn before ears/face)
   if (build.hasMane) {
     for (let i = 0; i < 10; i++) {
       const a = (i / 10) * Math.PI * 2;
@@ -1224,26 +1382,32 @@ export function drawCreatureModular(g: Phaser.GameObjects.Graphics, species: Spe
     }
   }
 
-  // Re-draw head on top of mane for mane beasts
   if (build.plan === 'maneBeast') {
     sphere(g, hx, headY, headR, body);
   }
 
   drawEars(g, build.ear, hx, headY, headR, body, accent, dark);
 
-  // Patterns (shell / spots) — skip mane here since we drew it above
   const patternBuild = { ...build, hasMane: false };
-  drawPatterns(g, patternBuild, cx, headY, bodyY, headR, R, accent, dark);
+  drawPatterns(g, patternBuild, cx, headY, bodyY, headR, R, accent, dark, pattern);
 
   drawSnout(g, build.snout, hx, headY, headR, body, accent, dark);
 
-  // Bird crest
   if (arch === 'bird') {
     g.fillStyle(accent, 1);
-    g.fillTriangle(hx, headY - headR * 1.15, hx - headR * 0.22, headY - headR * 0.7, hx + headR * 0.22, headY - headR * 0.7);
+    g.fillTriangle(hx, headY - headR * 1.2, hx - headR * 0.25, headY - headR * 0.65, hx + headR * 0.25, headY - headR * 0.65);
   }
 
-  // Boar tusks / fangs
+  // Crab stalk eyes (drawn before main face)
+  if (build.stalkEyes) {
+    g.lineStyle(Math.max(2, R * 0.1), dark, 1);
+    g.lineBetween(cx - R * 0.35, headY + R * 0.15, cx - R * 0.55, headY - R * 0.55);
+    g.lineBetween(cx + R * 0.35, headY + R * 0.15, cx + R * 0.55, headY - R * 0.55);
+    sphere(g, cx - R * 0.55, headY - R * 0.55, headR * 0.55, body);
+    sphere(g, cx + R * 0.55, headY - R * 0.55, headR * 0.55, body);
+    drawCuteEyes(g, cx - R * 0.55, headY - R * 0.55, cx + R * 0.55, headY - R * 0.55, headR * 0.28);
+  }
+
   if (arch === 'boar' || build.fang) {
     g.fillStyle(0xfff8e1, 1);
     if (arch === 'boar') {
@@ -1255,7 +1419,6 @@ export function drawCreatureModular(g: Phaser.GameObjects.Graphics, species: Spe
     }
   }
 
-  // Whiskers
   if (build.whiskers) {
     g.lineStyle(Math.max(1, headR * 0.05), dark, 0.55);
     for (const side of [-1, 1]) {
@@ -1264,31 +1427,32 @@ export function drawCreatureModular(g: Phaser.GameObjects.Graphics, species: Spe
     }
   }
 
-  // Face
   const eyeY = arch === 'frog' ? headY - headR * 0.1 : headY - headR * 0.02;
   const eyeR = headR * (build.multiEyes ? 0.14 : arch === 'mole' ? 0.12 : 0.22);
   const gap = headR * build.eyeGap;
   const spooky = arch === 'ghost' || (type === 'darkness' && (arch === 'imp' || arch === 'jelly'));
 
-  if (build.multiEyes) {
-    drawCuteEyes(g, hx - gap, eyeY, hx + gap, eyeY, eyeR);
-    g.fillStyle(0xffffff, 1);
-    g.fillCircle(hx - gap * 1.65, eyeY + eyeR * 0.85, eyeR * 0.7);
-    g.fillCircle(hx + gap * 1.65, eyeY + eyeR * 0.85, eyeR * 0.7);
-    g.fillCircle(hx - gap * 0.35, eyeY - eyeR * 1.1, eyeR * 0.55);
-    g.fillCircle(hx + gap * 0.35, eyeY - eyeR * 1.1, eyeR * 0.55);
-    g.fillStyle(0x263238, 1);
-    g.fillCircle(hx - gap * 1.65, eyeY + eyeR * 0.85, eyeR * 0.35);
-    g.fillCircle(hx + gap * 1.65, eyeY + eyeR * 0.85, eyeR * 0.35);
-    g.fillCircle(hx - gap * 0.35, eyeY - eyeR * 1.1, eyeR * 0.28);
-    g.fillCircle(hx + gap * 0.35, eyeY - eyeR * 1.1, eyeR * 0.28);
-  } else if (arch === 'frog') {
-    drawCuteEyes(g, hx - headR * 0.55, eyeY, hx + headR * 0.55, eyeY, eyeR * 1.1);
-  } else {
-    drawCuteEyes(g, hx - gap, eyeY, hx + gap, eyeY, eyeR, spooky);
+  if (!build.stalkEyes) {
+    if (build.multiEyes) {
+      drawCuteEyes(g, hx - gap, eyeY, hx + gap, eyeY, eyeR);
+      g.fillStyle(0xffffff, 1);
+      g.fillCircle(hx - gap * 1.65, eyeY + eyeR * 0.85, eyeR * 0.7);
+      g.fillCircle(hx + gap * 1.65, eyeY + eyeR * 0.85, eyeR * 0.7);
+      g.fillCircle(hx - gap * 0.35, eyeY - eyeR * 1.1, eyeR * 0.55);
+      g.fillCircle(hx + gap * 0.35, eyeY - eyeR * 1.1, eyeR * 0.55);
+      g.fillStyle(0x263238, 1);
+      g.fillCircle(hx - gap * 1.65, eyeY + eyeR * 0.85, eyeR * 0.35);
+      g.fillCircle(hx + gap * 1.65, eyeY + eyeR * 0.85, eyeR * 0.35);
+      g.fillCircle(hx - gap * 0.35, eyeY - eyeR * 1.1, eyeR * 0.28);
+      g.fillCircle(hx + gap * 0.35, eyeY - eyeR * 1.1, eyeR * 0.28);
+    } else if (arch === 'frog') {
+      drawCuteEyes(g, hx - headR * 0.55, eyeY, hx + headR * 0.55, eyeY, eyeR * 1.1);
+    } else {
+      drawCuteEyes(g, hx - gap, eyeY, hx + gap, eyeY, eyeR, spooky);
+    }
   }
 
-  if (!build.multiEyes) {
+  if (!build.multiEyes && !build.stalkEyes) {
     g.fillStyle(0xff8a80, arch === 'ghost' ? 0.25 : 0.45);
     g.fillCircle(hx - headR * 0.65, headY + headR * 0.28, headR * 0.15);
     g.fillCircle(hx + headR * 0.65, headY + headR * 0.28, headR * 0.15);
