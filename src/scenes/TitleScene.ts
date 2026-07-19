@@ -44,23 +44,34 @@ export class TitleScene extends Phaser.Scene {
       });
     });
 
-    new Button(this, GAME_WIDTH / 2 - 90, 200, 'New Adventure', {
+    new Button(this, GAME_WIDTH / 2 - 90, 196, 'New Adventure', {
       w: 180,
-      h: 36,
+      h: 34,
       fill: 0x6ec6a0,
       hoverFill: 0x88d8b4,
       onClick: () => this.showStarterSelect(),
     });
 
     const hasSave = Game.hasSave();
-    new Button(this, GAME_WIDTH / 2 - 90, 246, 'Continue', {
+    new Button(this, GAME_WIDTH / 2 - 90, 238, 'Continue', {
       w: 180,
-      h: 36,
+      h: 34,
       enabled: hasSave,
       fill: 0xf4a261,
       hoverFill: 0xf6b57a,
       onClick: () => {
         if (Game.loadFromStorage()) this.scene.start('World');
+      },
+    });
+
+    new Button(this, GAME_WIDTH / 2 - 90, 280, 'Review Creatures', {
+      w: 180,
+      h: 30,
+      fill: 0x64b5f6,
+      hoverFill: 0x90caf9,
+      onClick: () => {
+        const base = import.meta.env.BASE_URL || '/';
+        window.location.href = `${base}review.html`;
       },
     });
   }

@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#8ec8e8" />
+    <link rel="icon" href="data:," />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap"
+      rel="stylesheet"
+    />
+    <title>Creature Catch — Roster Review</title>
+    <script type="module" crossorigin src="/creaturecatch/assets/review-Ch7WXhGo.js"></script>
+    <link rel="modulepreload" crossorigin href="/creaturecatch/assets/textures-Xw0tfPYd.js">
+    <link rel="stylesheet" crossorigin href="/creaturecatch/assets/review-jx9gY8U0.css">
+  </head>
+  <body>
+    <div id="bake" aria-hidden="true"></div>
+    <div id="app">
+      <header class="top">
+        <div class="brand-block">
+          <p class="eyebrow"><a href="./">← Back to game</a></p>
+          <h1>Creature Catch</h1>
+          <p class="sub">Roster review — click a creature, leave notes, export feedback.</p>
+        </div>
+        <div class="actions">
+          <button type="button" id="btn-export" class="btn primary">Export feedback JSON</button>
+          <button type="button" id="btn-copy" class="btn">Copy feedback</button>
+          <button type="button" id="btn-clear" class="btn ghost">Clear notes</button>
+        </div>
+      </header>
+
+      <section class="toolbar" aria-label="Filters">
+        <label class="field grow">
+          <span>Search</span>
+          <input id="search" type="search" placeholder="Name, id, line…" autocomplete="off" />
+        </label>
+        <label class="field">
+          <span>Type</span>
+          <select id="filter-type">
+            <option value="">All types</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Archetype</span>
+          <select id="filter-arch">
+            <option value="">All shapes</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Stage</span>
+          <select id="filter-stage">
+            <option value="">All stages</option>
+            <option value="0">Base</option>
+            <option value="1">Mid</option>
+            <option value="2">Final</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Feedback</span>
+          <select id="filter-notes">
+            <option value="">All</option>
+            <option value="has">Has notes / rating</option>
+            <option value="missing">Needs review</option>
+          </select>
+        </label>
+        <p class="count" id="count"></p>
+      </section>
+
+      <div class="layout">
+        <main class="grid" id="grid" aria-live="polite"></main>
+        <aside class="detail" id="detail" hidden>
+          <div class="detail-art">
+            <img id="detail-img" alt="" width="160" height="160" />
+          </div>
+          <h2 id="detail-name"></h2>
+          <p class="meta" id="detail-meta"></p>
+          <p class="evo" id="detail-evo"></p>
+          <dl class="stats" id="detail-stats"></dl>
+
+          <fieldset class="feedback">
+            <legend>Your feedback</legend>
+            <div class="stars" id="stars" role="radiogroup" aria-label="Rating">
+              <button type="button" data-rating="1" aria-label="1 star">★</button>
+              <button type="button" data-rating="2" aria-label="2 stars">★</button>
+              <button type="button" data-rating="3" aria-label="3 stars">★</button>
+              <button type="button" data-rating="4" aria-label="4 stars">★</button>
+              <button type="button" data-rating="5" aria-label="5 stars">★</button>
+            </div>
+            <label class="field grow">
+              <span>Notes</span>
+              <textarea
+                id="detail-notes"
+                rows="5"
+                placeholder="Silhouette, colors, vibe, what to change…"
+              ></textarea>
+            </label>
+            <p class="hint">Saved in this browser. Export when you want to share.</p>
+          </fieldset>
+        </aside>
+      </div>
+    </div>
+  </body>
+</html>

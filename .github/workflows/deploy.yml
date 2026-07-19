@@ -30,6 +30,7 @@ jobs:
       - name: Sync built site into docs/
         run: |
           cp dist/index.html docs/index.html
+          cp dist/review.html docs/review.html
           rm -rf docs/assets
           cp -r dist/assets docs/assets
           touch docs/.nojekyll
@@ -38,7 +39,7 @@ jobs:
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: 'chore: update GitHub Pages site in docs/ [skip ci]'
-          file_pattern: docs/index.html docs/assets/* docs/.nojekyll
+          file_pattern: docs/index.html docs/review.html docs/assets/* docs/.nojekyll
 
       # Also publish to the gh-pages branch (preferred Pages source).
       - uses: peaceiris/actions-gh-pages@v4
