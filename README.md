@@ -46,7 +46,35 @@ Progress autosaves to `localStorage`; you can also export/import your save from 
 See [`PLAN.md`](PLAN.md) and [`docs/`](docs/) for the full design: type system, creature
 roster, regions, systems, and architecture.
 
-## Deployment
+## Deployment / GitHub Pages
 
-Pushing to `main` triggers `.github/workflows/deploy.yml`, which builds and publishes to
-GitHub Pages. Enable Pages (Settings → Pages → Source: GitHub Actions) for it to go live.
+The game is published as a static site. Built files live in two places:
+
+- **`docs/` on `main`** — use this if Pages is set to the `main` branch
+- **`gh-pages` branch** — preferred; contains only the built site
+
+### Enable Pages (required — one-time)
+
+Open **this** repo (not your personal `zakerytclarke.github.io` site):
+
+[`https://github.com/zakerytclarke/creaturecatch/settings/pages`](https://github.com/zakerytclarke/creaturecatch/settings/pages)
+
+Then set:
+
+| Setting | Value |
+|---------|-------|
+| Source | **Deploy from a branch** |
+| Branch | **`main`** |
+| Folder | **`/docs`** |
+
+(Or: Branch **`gh-pages`** / Folder **`/(root)`** — either works.)
+
+Save, wait ~1 minute, then open:
+
+**https://zakerytclarke.github.io/creaturecatch/**
+
+(If you use the custom domain on your personal site, that redirects to `http://zclarke.dev/creaturecatch/`.)
+
+> Important: Pages must be enabled on the **creaturecatch** repo. Enabling it only on
+> `zakerytclarke.github.io` will keep `/creaturecatch/` as a 404.
+

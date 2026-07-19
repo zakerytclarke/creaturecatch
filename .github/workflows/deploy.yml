@@ -5,7 +5,8 @@ on:
     branches: [main]
   workflow_dispatch:
 
-# Needed so the action can push the built site to the gh-pages branch.
+# Needed so the action can push the built site to the gh-pages branch
+# and update docs/ on main for branch-based Pages.
 permissions:
   contents: write
 
@@ -24,7 +25,22 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
-      # Publishes ./dist to the gh-pages branch (adds .nojekyll automatically).
+
+      # Keep a built copy in docs/ so Pages can serve from main / docs.
+      - name: Sync built site into docs/
+        run: |
+          cp dist/index.html docs/index.html
+          rm -rf docs/assets
+          cp -r dist/assets docs/assets
+          touch docs/.nojekyll
+
+      - name: Commit docs site to main
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: 'chore: update GitHub Pages site in docs/ [skip ci]'
+          file_pattern: docs/index.html docs/assets/* docs/.nojekyll
+
+      # Also publish to the gh-pages branch (preferred Pages source).
       - uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
